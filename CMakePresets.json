@@ -1,0 +1,94 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "release",
+      "displayName": "Release (AVX2 + PEXT)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENROQUE_NATIVE": "ON"
+      }
+    },
+    {
+      "name": "portable",
+      "displayName": "Portable (sin AVX2 ni PEXT)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/portable",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENROQUE_NATIVE": "OFF"
+      }
+    },
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENROQUE_NATIVE": "ON"
+      }
+    },
+    {
+      "name": "asan",
+      "displayName": "AddressSanitizer",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "ENROQUE_NATIVE": "ON",
+        "CMAKE_CXX_FLAGS": "/fsanitize=address /EHsc"
+      }
+    },
+    {
+      "name": "tune",
+      "displayName": "Ajuste de parametros por UCI",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/tune",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENROQUE_NATIVE": "ON",
+        "ENROQUE_TUNE": "ON"
+      }
+    },
+    {
+      "name": "avx2",
+      "displayName": "AVX2 sin PEXT (AMD Zen 1 y 2)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/avx2",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENROQUE_NATIVE": "ON",
+        "ENROQUE_PEXT": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "portable",
+      "configurePreset": "portable"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan"
+    },
+    {
+      "name": "tune",
+      "configurePreset": "tune"
+    },
+    {
+      "name": "avx2",
+      "configurePreset": "avx2"
+    }
+  ]
+}
