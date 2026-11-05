@@ -13,7 +13,7 @@
 #include "nnue/network.h"
 #include "nnue/training_data.h"
 
-namespace enroque::train {
+namespace ayano::train {
 
 // Pesos en coma flotante, antes de cuantizar.
 struct FloatNetwork {
@@ -80,4 +80,4 @@ std::unique_ptr<nnue::Network> quantize(const FloatNetwork& network,
 bool train(FloatNetwork& network, std::vector<nnue::PackedPosition>& samples,
            const TrainConfig& config, std::string* error = nullptr);
 
-}  // namespace enroque::train
+}  // namespace ayano::train

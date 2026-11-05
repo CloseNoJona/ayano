@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
@@ -52,4 +52,4 @@ std::int64_t TimeManager::elapsed_ms() const {
   return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 }
 
-}  // namespace enroque
+}  // namespace ayano

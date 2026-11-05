@@ -10,7 +10,7 @@
 #include "board/position.h"
 #include "search/engine.h"
 
-namespace enroque {
+namespace ayano {
 
 class Uci : public SearchListener {
  public:
@@ -49,4 +49,4 @@ class Uci : public SearchListener {
   Engine engine_;
 };
 
-}  // namespace enroque
+}  // namespace ayano

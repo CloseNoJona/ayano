@@ -8,7 +8,7 @@
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "ENROQUE_NATIVE": "ON"
+        "AYANO_NATIVE": "ON"
       }
     },
     {
@@ -18,7 +18,7 @@
       "binaryDir": "${sourceDir}/build/portable",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "ENROQUE_NATIVE": "OFF"
+        "AYANO_NATIVE": "OFF"
       }
     },
     {
@@ -28,7 +28,7 @@
       "binaryDir": "${sourceDir}/build/debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "ENROQUE_NATIVE": "ON"
+        "AYANO_NATIVE": "ON"
       }
     },
     {
@@ -38,7 +38,7 @@
       "binaryDir": "${sourceDir}/build/asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "ENROQUE_NATIVE": "ON",
+        "AYANO_NATIVE": "ON",
         "CMAKE_CXX_FLAGS": "/fsanitize=address /EHsc"
       }
     },
@@ -49,8 +49,8 @@
       "binaryDir": "${sourceDir}/build/tune",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "ENROQUE_NATIVE": "ON",
-        "ENROQUE_TUNE": "ON"
+        "AYANO_NATIVE": "ON",
+        "AYANO_TUNE": "ON"
       }
     },
     {
@@ -60,8 +60,8 @@
       "binaryDir": "${sourceDir}/build/avx2",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "ENROQUE_NATIVE": "ON",
-        "ENROQUE_PEXT": "OFF"
+        "AYANO_NATIVE": "ON",
+        "AYANO_PEXT": "OFF"
       }
     }
   ],

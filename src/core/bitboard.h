@@ -5,7 +5,7 @@
 
 #include "core/types.h"
 
-namespace enroque {
+namespace ayano {
 
 inline constexpr Bitboard FILE_A_BB = 0x0101010101010101ULL;
 inline constexpr Bitboard FILE_B_BB = FILE_A_BB << 1;
@@ -48,4 +48,4 @@ constexpr Bitboard shift(Bitboard b) {
   if constexpr (D == SOUTH_WEST) return (b & ~FILE_A_BB) >> 9;
 }
 
-}  // namespace enroque
+}  // namespace ayano

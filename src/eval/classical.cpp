@@ -5,7 +5,7 @@
 
 #include "eval/pst.h"
 
-namespace enroque::classical {
+namespace ayano::classical {
 
 namespace {
 
@@ -27,7 +27,6 @@ struct Score {
 
 constexpr Score operator*(Score s, int factor) { return {s.mg * factor, s.eg * factor}; }
 
-constexpr int kMaxPhase = 24;
 constexpr std::array<int, 6> kPhaseWeight = {0, 1, 1, 2, 4, 0};
 
 constexpr Score kBishopPair = {25, 45};
@@ -36,7 +35,6 @@ constexpr Score kDoubledPawn = {-6, -18};
 constexpr Score kConnectedPawn = {6, 5};
 constexpr Score kRookOpenFile = {22, 8};
 constexpr Score kRookSemiOpenFile = {10, 5};
-constexpr int kTempo = 12;
 
 constexpr std::array<Score, 8> kPassedPawn = {{{0, 0}, {2, 8}, {4, 12}, {10, 25},
                                                {25, 50}, {50, 95}, {85, 150}, {0, 0}}};
@@ -175,6 +173,8 @@ int endgame_scale(const Position& pos, Color strong) {
   return minor_or_major(strong) - minor_or_major(~strong) <= 3 ? 12 : 64;
 }
 
+}  // namespace
+
 int game_phase(const Position& pos) {
   int phase = 0;
   for (int pt = KNIGHT; pt <= QUEEN; ++pt) {
@@ -183,16 +183,12 @@ int game_phase(const Position& pos) {
   return std::min(phase, kMaxPhase);
 }
 
-}  // namespace
-
-Value evaluate(const Position& pos) {
+PositionalTerms positional_terms(const Position& pos) {
   std::array<SideInfo, COLOR_NB> info;
   info[WHITE].pawn_attacks = pawn_attack_span(WHITE, pos.pieces(WHITE, PAWN));
   info[BLACK].pawn_attacks = pawn_attack_span(BLACK, pos.pieces(BLACK, PAWN));
 
   Score score;
-  score += material_and_position(pos, WHITE);
-  score -= material_and_position(pos, BLACK);
   score += pawn_structure(pos, WHITE);
   score -= pawn_structure(pos, BLACK);
   score += piece_activity(pos, WHITE, info[BLACK], info[WHITE]);
@@ -201,6 +197,14 @@ Value evaluate(const Position& pos) {
   score -= king_danger(pos, BLACK, info[BLACK]);
   score += king_shelter(pos, WHITE);
   score -= king_shelter(pos, BLACK);
+  return {score.mg, score.eg};
+}
+
+Value evaluate(const Position& pos) {
+  const PositionalTerms terms = positional_terms(pos);
+  Score score = {terms.mg, terms.eg};
+  score += material_and_position(pos, WHITE);
+  score -= material_and_position(pos, BLACK);
 
   const int phase = game_phase(pos);
   int value = (score.mg * phase + score.eg * (kMaxPhase - phase)) / kMaxPhase;
@@ -210,4 +214,4 @@ Value evaluate(const Position& pos) {
   return relative + kTempo;
 }
 
-}  // namespace enroque::classical
+}  // namespace ayano::classical

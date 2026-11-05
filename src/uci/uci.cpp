@@ -12,11 +12,11 @@
 #include "search/params.h"
 #include "uci/bench.h"
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
-constexpr const char* kEngineName = "Enroque 1.0";
+constexpr const char* kEngineName = "Ayano 1.0";
 constexpr const char* kEngineAuthor = "Jonathan Garcia y Claude";
 constexpr int kMaxHashMb = 65536;
 constexpr int kMaxThreads = 256;
@@ -35,6 +35,16 @@ std::optional<std::int64_t> parse_int(const std::string& text, std::int64_t low,
   const auto [ptr, ec] = std::from_chars(text.data(), end, value);
   if (ec != std::errc() || ptr != end || value < low || value > high) return std::nullopt;
   return value;
+}
+
+// Une las palabras siguientes hasta `stop`: los nombres de las opciones llevan espacios.
+std::string join_words(std::istringstream& args, std::string_view stop) {
+  std::string joined;
+  for (std::string word; args >> word && word != stop;) {
+    if (!joined.empty()) joined.push_back(' ');
+    joined += word;
+  }
+  return joined;
 }
 
 std::string score_to_uci(Value score) {
@@ -225,7 +235,7 @@ void Uci::apply_option(const std::string& name, const std::string& value) {
     return parsed;
   };
 
-#ifdef ENROQUE_TUNE
+#ifdef AYANO_TUNE
   for (const params::TunableParam& param : params::kTunableParams) {
     if (to_lower(std::string(param.name)) != key) continue;
     if (const auto parsed = read_int(param.low, param.high)) {
@@ -273,13 +283,10 @@ void Uci::apply_option(const std::string& name, const std::string& value) {
 
 void Uci::handle_setoption(std::istringstream& args) {
   stop_search();
-  std::string token;
-  std::string name;
-  std::string value;
-  args >> token;  // "name"
-  while (args >> token && token != "value") name += (name.empty() ? "" : " ") + token;
-  while (args >> token) value += (value.empty() ? "" : " ") + token;
-  apply_option(name, value);
+  std::string keyword;
+  args >> keyword;  // "name"
+  const std::string name = join_words(args, "value");
+  apply_option(name, join_words(args, {}));
 }
 
 void Uci::handle_perft(std::istringstream& args) {
@@ -380,4 +387,4 @@ void Uci::loop() {
   stop_search();  // la interfaz cerro la entrada estandar
 }
 
-}  // namespace enroque
+}  // namespace ayano

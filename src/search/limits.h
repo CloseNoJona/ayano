@@ -7,7 +7,7 @@
 
 #include "core/types.h"
 
-namespace enroque {
+namespace ayano {
 
 struct SearchLimits {
   std::array<std::int64_t, COLOR_NB> time_ms{};
@@ -25,4 +25,4 @@ struct SearchLimits {
   bool uses_clock() const { return time_ms[WHITE] > 0 || time_ms[BLACK] > 0; }
 };
 
-}  // namespace enroque
+}  // namespace ayano

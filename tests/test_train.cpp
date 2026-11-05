@@ -12,9 +12,9 @@
 #include "test_framework.h"
 #include "train/trainer.h"
 
-using namespace enroque;
-using namespace enroque::nnue;
-using namespace enroque::train;
+using namespace ayano;
+using namespace ayano::nnue;
+using namespace ayano::train;
 
 namespace {
 
@@ -237,7 +237,7 @@ TEST(entrenar_falla_si_no_puede_guardar_la_red) {
   config.threads = 1;
   config.output_prefix = "carpeta_que_no_existe/red";
   std::string error;
-  CHECK(!enroque::train::train(*network, samples, config, &error));
+  CHECK(!ayano::train::train(*network, samples, config, &error));
   CHECK(!error.empty());
 }
 
@@ -250,7 +250,7 @@ TEST(entrenar_falla_si_no_queda_un_lote_completo) {
   config.threads = 1;
   config.output_prefix = "test_entrenamiento_sin_lotes";
   std::string error;
-  CHECK(!enroque::train::train(*network, samples, config, &error));
+  CHECK(!ayano::train::train(*network, samples, config, &error));
   CHECK(!error.empty());
 }
 
@@ -265,7 +265,7 @@ TEST(entrenar_falla_si_la_perdida_no_es_finita) {
   config.threads = 1;
   config.output_prefix = "test_entrenamiento_divergente";
   std::string error;
-  CHECK(!enroque::train::train(*network, samples, config, &error));
+  CHECK(!ayano::train::train(*network, samples, config, &error));
   CHECK(!error.empty());
 }
 
@@ -284,7 +284,7 @@ TEST(entrenar_reduce_la_perdida) {
   config.wdl_weight = 0.0f;
   config.output_prefix = "test_entrenamiento_temporal";
   std::string error;
-  CHECK(enroque::train::train(*network, samples, config, &error));
+  CHECK(ayano::train::train(*network, samples, config, &error));
   CHECK(error.empty());
 
   const double after = mean_loss(*network, samples, 0.0f);

@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-namespace enroque::nnue {
+namespace ayano::nnue {
 
 namespace {
 
@@ -55,7 +55,7 @@ bool parse_network(std::span<const std::uint8_t> bytes, Network& network, std::s
 
   Header header{};
   std::memcpy(&header, bytes.data(), sizeof(header));
-  if (header.magic != kMagic) return fail(error, "el archivo no es una red de Enroque");
+  if (header.magic != kMagic) return fail(error, "el archivo no es una red de Ayano");
   if (header.features != kFeatures || header.hidden != kHidden ||
       header.buckets != kOutputBuckets) {
     return fail(error, "la red tiene otra arquitectura");
@@ -120,4 +120,4 @@ bool init(std::string* error) {
   return true;
 }
 
-}  // namespace enroque::nnue
+}  // namespace ayano::nnue

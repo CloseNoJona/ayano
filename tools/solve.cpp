@@ -16,7 +16,7 @@
 #include "nnue/network.h"
 #include "search/engine.h"
 
-using namespace enroque;
+using namespace ayano;
 
 namespace {
 

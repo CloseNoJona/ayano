@@ -3,7 +3,7 @@
 #include "board/movegen.h"
 #include "core/zobrist.h"
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
@@ -288,4 +288,4 @@ bool Position::is_insufficient_material() const {
   return !(bishops & DARK_SQUARES_BB) || !(bishops & ~DARK_SQUARES_BB);
 }
 
-}  // namespace enroque
+}  // namespace ayano

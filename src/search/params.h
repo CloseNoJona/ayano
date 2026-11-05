@@ -1,13 +1,13 @@
 // Parametros numericos de la busqueda. Estan reunidos aqui para poder ajustarlos con
 // partidas de prueba sin tocar la logica. En la compilacion normal son constantes; con
-// ENROQUE_TUNE se convierten en variables modificables mediante opciones UCI.
+// AYANO_TUNE se convierten en variables modificables mediante opciones UCI.
 #pragma once
 
 #include <array>
 #include <string_view>
 
 // X(nombre, valor, minimo, maximo)
-#define ENROQUE_SEARCH_PARAMS(X)         \
+#define AYANO_SEARCH_PARAMS(X)         \
   /* Ventana de aspiracion */            \
   X(kAspirationDelta, 14, 5, 40)         \
   /* Poda antes de generar jugadas */    \
@@ -68,22 +68,22 @@
   X(kCorrectionNonPawnWeight, 55, 0, 160) \
   X(kCorrectionDivisor, 512, 128, 1024)
 
-namespace enroque::params {
+namespace ayano::params {
 
-#ifdef ENROQUE_TUNE
-#define ENROQUE_DECLARE_PARAM(name, value, low, high) inline int name = value;
+#ifdef AYANO_TUNE
+#define AYANO_DECLARE_PARAM(name, value, low, high) inline int name = value;
 #else
-#define ENROQUE_DECLARE_PARAM(name, value, low, high) inline constexpr int name = value;
+#define AYANO_DECLARE_PARAM(name, value, low, high) inline constexpr int name = value;
 #endif
 
-ENROQUE_SEARCH_PARAMS(ENROQUE_DECLARE_PARAM)
+AYANO_SEARCH_PARAMS(AYANO_DECLARE_PARAM)
 
-#undef ENROQUE_DECLARE_PARAM
+#undef AYANO_DECLARE_PARAM
 
 // Margen de la ventana de aspiracion por debajo del cual no se usa.
 inline constexpr int kAspirationMinDepth = 4;
 
-#ifdef ENROQUE_TUNE
+#ifdef AYANO_TUNE
 struct TunableParam {
   std::string_view name;
   int* value;
@@ -91,9 +91,9 @@ struct TunableParam {
   int high;
 };
 
-#define ENROQUE_LIST_PARAM(name, value, low, high) TunableParam{#name, &name, low, high},
-inline const auto kTunableParams = std::array{ENROQUE_SEARCH_PARAMS(ENROQUE_LIST_PARAM)};
-#undef ENROQUE_LIST_PARAM
+#define AYANO_LIST_PARAM(name, value, low, high) TunableParam{#name, &name, low, high},
+inline const auto kTunableParams = std::array{AYANO_SEARCH_PARAMS(AYANO_LIST_PARAM)};
+#undef AYANO_LIST_PARAM
 #endif
 
-}  // namespace enroque::params
+}  // namespace ayano::params

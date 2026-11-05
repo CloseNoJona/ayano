@@ -4,7 +4,7 @@
 
 #include "core/prng.h"
 
-namespace enroque::zobrist {
+namespace ayano::zobrist {
 
 Keys keys;
 
@@ -31,4 +31,4 @@ void init() {
   });
 }
 
-}  // namespace enroque::zobrist
+}  // namespace ayano::zobrist

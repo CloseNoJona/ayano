@@ -5,7 +5,7 @@
 #include <map>
 #include <new>
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
@@ -184,4 +184,4 @@ Value Engine::evaluate(const Position& pos) {
   return workers_[0]->evaluate_root();
 }
 
-}  // namespace enroque
+}  // namespace ayano

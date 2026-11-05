@@ -35,7 +35,7 @@ $bin = "build\release"
 
 Push-Location (Join-Path $PSScriptRoot "..")
 try {
-  foreach ($tool in "datagen", "train", "match", "enroque") {
+  foreach ($tool in "datagen", "train", "match", "ayano") {
     if (-not (Test-Path "$bin\$tool.exe")) { throw "Falta $tool.exe: compila con scripts\build.cmd" }
   }
   if (-not (Test-Path $CurrentNet)) { throw "No existe la red $CurrentNet" }
@@ -57,7 +57,7 @@ try {
 
   $candidate = "nets\$Name-$Epochs.nnue"
   Write-Host "== 3/3 Enfrentando $candidate contra $CurrentNet"
-  & "$bin\match.exe" --engine1 "$bin\enroque.exe" --engine2 "$bin\enroque.exe" `
+  & "$bin\match.exe" --engine1 "$bin\ayano.exe" --engine2 "$bin\ayano.exe" `
     --opt1 "EvalFile=$candidate" --opt2 "EvalFile=$CurrentNet" `
     --games $MatchGames --concurrency 5 --tc 8+0.08 --sprt 0 10 --seed $seed
   if ($LASTEXITCODE -ne 0) { throw "match fallo: el resultado no es valido" }

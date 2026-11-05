@@ -1,5 +1,5 @@
 // Tablas de ataque precalculadas. Las piezas deslizantes usan PEXT o bitboards
-// magicos segun como se compile (ver ENROQUE_PEXT): se decide en compilacion. PEXT es
+// magicos segun como se compile (ver AYANO_PEXT): se decide en compilacion. PEXT es
 // rapido en Intel y en AMD desde Zen 3, pero muy lento en Zen 1 y Zen 2.
 #pragma once
 
@@ -8,11 +8,11 @@
 #include "core/bitboard.h"
 #include "core/types.h"
 
-#ifdef ENROQUE_USE_PEXT
+#ifdef AYANO_USE_PEXT
 #include <immintrin.h>
 #endif
 
-namespace enroque::attacks {
+namespace ayano::attacks {
 
 // Debe llamarse una vez antes de usar cualquier otra funcion de este modulo.
 void init();
@@ -24,7 +24,7 @@ struct SliderEntry {
   unsigned shift;
 
   unsigned index(Bitboard occupied) const {
-#ifdef ENROQUE_USE_PEXT
+#ifdef AYANO_USE_PEXT
     return unsigned(_pext_u64(occupied, mask));
 #else
     return unsigned(((occupied & mask) * magic) >> shift);
@@ -80,4 +80,4 @@ inline Bitboard of(PieceType pt, Square s, Bitboard occupied) {
   }
 }
 
-}  // namespace enroque::attacks
+}  // namespace ayano::attacks

@@ -6,7 +6,7 @@
 #include <immintrin.h>
 #endif
 
-namespace enroque::nnue {
+namespace ayano::nnue {
 
 namespace {
 
@@ -200,4 +200,4 @@ Value evaluate_from_scratch(const Network& network, const Position& pos) {
   return network_output(network, accumulator, pos);
 }
 
-}  // namespace enroque::nnue
+}  // namespace ayano::nnue

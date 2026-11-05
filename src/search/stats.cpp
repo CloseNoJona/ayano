@@ -5,7 +5,7 @@
 #include "search/params.h"
 #include "search/worker.h"
 
-namespace enroque {
+namespace ayano {
 
 Value Worker::corrected_eval(const Position& pos, Value raw) const {
   const Color us = pos.side_to_move();
@@ -98,4 +98,4 @@ void Worker::update_prior_move_stats(Node& n) {
                                     bonus / 2);
 }
 
-}  // namespace enroque
+}  // namespace ayano

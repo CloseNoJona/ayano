@@ -2,12 +2,12 @@
 // compila en su lugar un archivo generado con los datos de la red.
 #include "nnue/network.h"
 
-#ifndef ENROQUE_HAS_EMBEDDED_NET
+#ifndef AYANO_HAS_EMBEDDED_NET
 
-namespace enroque::nnue {
+namespace ayano::nnue {
 
 std::span<const std::uint8_t> embedded_network() { return {}; }
 
-}  // namespace enroque::nnue
+}  // namespace ayano::nnue
 
 #endif

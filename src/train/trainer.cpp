@@ -11,7 +11,7 @@
 
 #include "core/prng.h"
 
-namespace enroque::train {
+namespace ayano::train {
 
 using nnue::kFeatures;
 using nnue::kHidden;
@@ -407,4 +407,4 @@ bool train(FloatNetwork& network, std::vector<PackedPosition>& samples, const Tr
   return true;
 }
 
-}  // namespace enroque::train
+}  // namespace ayano::train

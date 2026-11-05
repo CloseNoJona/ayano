@@ -9,7 +9,7 @@
 
 #include "core/types.h"
 
-namespace enroque {
+namespace ayano {
 
 using HistoryValue = std::int16_t;
 
@@ -52,4 +52,4 @@ struct Histories {
   PieceToHistory sentinel;  // destino de las referencias antes del primer nodo
 };
 
-}  // namespace enroque
+}  // namespace ayano

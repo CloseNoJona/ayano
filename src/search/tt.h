@@ -14,7 +14,7 @@
 
 #include "core/types.h"
 
-namespace enroque {
+namespace ayano {
 
 enum class Bound : std::uint8_t { None = 0, Upper = 1, Lower = 2, Exact = 3 };
 
@@ -81,4 +81,4 @@ constexpr Value value_from_tt(Value v, int ply) {
   return v;
 }
 
-}  // namespace enroque
+}  // namespace ayano

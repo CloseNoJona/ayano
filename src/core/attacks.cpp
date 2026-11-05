@@ -6,7 +6,7 @@
 
 #include "core/prng.h"
 
-namespace enroque::attacks {
+namespace ayano::attacks {
 
 Tables tables;
 
@@ -69,7 +69,7 @@ Bitboard relevant_mask(Square s, const std::array<Direction, 4>& directions) {
   return slide(s, 0, directions) & ~edges;
 }
 
-#ifndef ENROQUE_USE_PEXT
+#ifndef AYANO_USE_PEXT
 // Busca un multiplicador sin colisiones destructivas para esta casilla.
 Bitboard find_magic(SliderEntry& entry, const std::vector<Bitboard>& occupancies,
                     const std::vector<Bitboard>& references, Bitboard* table, Prng& rng) {
@@ -119,7 +119,7 @@ void init_sliders(std::array<SliderEntry, SQUARE_NB>& entries, Bitboard* table,
       subset = (subset - entry.mask) & entry.mask;
     } while (subset != 0);
 
-#ifndef ENROQUE_USE_PEXT
+#ifndef AYANO_USE_PEXT
     find_magic(entry, occupancies, references, next_table, rng);
 #endif
     for (std::size_t j = 0; j < occupancies.size(); ++j) {
@@ -162,4 +162,4 @@ void init() {
   });
 }
 
-}  // namespace enroque::attacks
+}  // namespace ayano::attacks

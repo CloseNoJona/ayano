@@ -7,7 +7,7 @@
 #include "board/position.h"
 #include "core/zobrist.h"
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
@@ -231,4 +231,4 @@ std::string Position::fen() const {
   return out.str();
 }
 
-}  // namespace enroque
+}  // namespace ayano

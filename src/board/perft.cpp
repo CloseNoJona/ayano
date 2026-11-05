@@ -4,7 +4,7 @@
 
 #include "board/movegen.h"
 
-namespace enroque {
+namespace ayano {
 
 std::uint64_t perft(const Position& pos, int depth) {
   const MoveList moves = legal_moves(pos);
@@ -30,4 +30,4 @@ std::uint64_t perft_divide(const Position& pos, int depth) {
   return total;
 }
 
-}  // namespace enroque
+}  // namespace ayano

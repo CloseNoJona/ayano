@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string>
 
-namespace enroque {
+namespace ayano {
 
 using Bitboard = std::uint64_t;
 using Key = std::uint64_t;
@@ -132,4 +132,4 @@ constexpr bool is_mate_score(Value v) {
 
 std::string square_to_string(Square s);
 
-}  // namespace enroque
+}  // namespace ayano

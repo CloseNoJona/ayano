@@ -1,6 +1,6 @@
 #include "search/movepicker.h"
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
@@ -309,4 +309,4 @@ Move MovePicker::next(bool skip_quiets) {
   }
 }
 
-}  // namespace enroque
+}  // namespace ayano

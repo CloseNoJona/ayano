@@ -7,7 +7,7 @@
 #include "board/movegen.h"
 #include "search/history.h"
 
-namespace enroque {
+namespace ayano {
 
 // Referencias de continuacion: 1, 2, 4 y 6 medias jugadas atras.
 using ContinuationRefs = std::array<const PieceToHistory*, 4>;
@@ -67,4 +67,4 @@ class MovePicker {
   MoveList list_;
 };
 
-}  // namespace enroque
+}  // namespace ayano

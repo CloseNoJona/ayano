@@ -13,7 +13,7 @@
 #include "core/bitboard.h"
 #include "core/types.h"
 
-namespace enroque {
+namespace ayano {
 
 // Valores para el intercambio estatico (SEE), en centipeones.
 constexpr Value see_value(PieceType pt) {
@@ -140,4 +140,4 @@ class Position {
   std::uint16_t game_ply_;
 };
 
-}  // namespace enroque
+}  // namespace ayano

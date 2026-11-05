@@ -1,8 +1,10 @@
 #include "nnue/training_data.h"
 
 #include <algorithm>
+#include <sstream>
+#include <string_view>
 
-namespace enroque::nnue {
+namespace ayano::nnue {
 
 PackedPosition pack_position(const Position& pos, Value score, GameResult result) {
   PackedPosition packed{};
@@ -38,6 +40,33 @@ UnpackedPosition unpack_position(const PackedPosition& packed) {
   return result;
 }
 
+std::string to_fen(const PackedPosition& packed) {
+  const UnpackedPosition unpacked = unpack_position(packed);
+  std::array<char, 64> board{};
+  constexpr std::string_view kChars = "PpNnBbRrQqKk";
+  for (int i = 0; i < unpacked.count; ++i) {
+    board[unpacked.squares[std::size_t(i)]] = kChars[unpacked.pieces[std::size_t(i)]];
+  }
+  std::ostringstream fen;
+  for (int rank = 7; rank >= 0; --rank) {
+    int empty = 0;
+    for (int file = 0; file < 8; ++file) {
+      const char c = board[std::size_t(rank * 8 + file)];
+      if (!c) {
+        ++empty;
+        continue;
+      }
+      if (empty) fen << empty;
+      empty = 0;
+      fen << c;
+    }
+    if (empty) fen << empty;
+    if (rank) fen << '/';
+  }
+  fen << (unpacked.side_to_move == WHITE ? " w - - 0 1" : " b - - 0 1");
+  return fen.str();
+}
+
 bool is_valid(const PackedPosition& packed) {
   const int count = popcount(packed.occupancy);
   if (count < 2 || count > 32) return false;
@@ -52,4 +81,4 @@ bool is_valid(const PackedPosition& packed) {
   return kings[WHITE] == 1 && kings[BLACK] == 1;
 }
 
-}  // namespace enroque::nnue
+}  // namespace ayano::nnue

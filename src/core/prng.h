@@ -1,9 +1,10 @@
-// Generador pseudoaleatorio SplitMix64: rapido, determinista y con semilla fija.
+// Generador pseudoaleatorio SplitMix64: rapido, determinista y con semilla fija. Sigue la
+// implementacion de referencia de Sebastiano Vigna, de dominio publico.
 #pragma once
 
 #include <cstdint>
 
-namespace enroque {
+namespace ayano {
 
 class Prng {
  public:
@@ -24,4 +25,4 @@ class Prng {
   std::uint64_t state_;
 };
 
-}  // namespace enroque
+}  // namespace ayano

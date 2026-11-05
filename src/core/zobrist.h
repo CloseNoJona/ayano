@@ -6,7 +6,7 @@
 
 #include "core/types.h"
 
-namespace enroque::zobrist {
+namespace ayano::zobrist {
 
 struct Keys {
   std::array<std::array<Key, SQUARE_NB>, PIECE_NB> piece;
@@ -24,4 +24,4 @@ inline Key castling(int rights) { return keys.castling[rights]; }
 inline Key en_passant(int file) { return keys.en_passant[file]; }
 inline Key side() { return keys.side; }
 
-}  // namespace enroque::zobrist
+}  // namespace ayano::zobrist

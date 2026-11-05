@@ -16,7 +16,7 @@
 #include "search/timeman.h"
 #include "search/tt.h"
 
-namespace enroque {
+namespace ayano {
 
 class Worker;
 
@@ -207,4 +207,4 @@ class Worker {
   Value previous_iteration_score_ = VALUE_NONE;
 };
 
-}  // namespace enroque
+}  // namespace ayano

@@ -6,7 +6,7 @@ file(WRITE "${OUTPUT}"
 "// Generado automaticamente a partir de la red: no editar.
 #include \"nnue/network.h\"
 
-namespace enroque::nnue {
+namespace ayano::nnue {
 
 namespace {
 constexpr std::uint8_t kEmbeddedNetwork[] = {${byte_list}};
@@ -14,5 +14,5 @@ constexpr std::uint8_t kEmbeddedNetwork[] = {${byte_list}};
 
 std::span<const std::uint8_t> embedded_network() { return kEmbeddedNetwork; }
 
-}  // namespace enroque::nnue
+}  // namespace ayano::nnue
 ")

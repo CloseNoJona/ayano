@@ -7,7 +7,7 @@
 #include "search/params.h"
 #include "search/worker.h"
 
-namespace enroque {
+namespace ayano {
 
 inline constexpr int kMaxTried = 32;
 
@@ -51,8 +51,8 @@ struct Node {
   Value early_return = VALUE_NONE;
   int quiet_count = 0;
   int capture_count = 0;
-  std::array<Move, kMaxTried> quiets_tried;
-  std::array<Move, kMaxTried> captures_tried;
+  std::array<Move, kMaxTried> quiets_tried{};
+  std::array<Move, kMaxTried> captures_tried{};
 };
 
 // Datos de la jugada que se esta considerando dentro del bucle.
@@ -65,4 +65,4 @@ struct Candidate {
   int new_depth;
 };
 
-}  // namespace enroque
+}  // namespace ayano

@@ -8,7 +8,7 @@
 
 #include "board/position.h"
 
-namespace enroque {
+namespace ayano {
 
 struct ExtMove {
   Move move;
@@ -52,4 +52,4 @@ MoveList legal_moves(const Position& pos);
 // Devuelve Move::none() si el texto no es una jugada legal en esta posicion.
 Move parse_uci_move(const Position& pos, std::string_view text);
 
-}  // namespace enroque
+}  // namespace ayano

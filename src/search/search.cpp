@@ -9,7 +9,7 @@
 #include "search/params.h"
 #include "search/worker.h"
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
@@ -587,4 +587,4 @@ template Value Worker::search<NodeType::Root>(int, Value, Value, int, bool);
 
 void rebuild_search_tables() { lmr_table.rebuild(); }
 
-}  // namespace enroque
+}  // namespace ayano

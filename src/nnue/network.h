@@ -10,13 +10,13 @@
 
 #include "board/position.h"
 
-namespace enroque::nnue {
+namespace ayano::nnue {
 
 inline constexpr int kFeatures = 768;
-#ifndef ENROQUE_HIDDEN
-#define ENROQUE_HIDDEN 512
+#ifndef AYANO_HIDDEN
+#define AYANO_HIDDEN 512
 #endif
-inline constexpr int kHidden = ENROQUE_HIDDEN;
+inline constexpr int kHidden = AYANO_HIDDEN;
 static_assert(kHidden > 0 && kHidden % 16 == 0, "AVX2 procesa las neuronas de 16 en 16");
 inline constexpr int kOutputBuckets = 8;
 inline constexpr int kQuantActivation = 255;  // escala de la capa de entrada (QA)
@@ -61,4 +61,4 @@ bool parse_network(std::span<const std::uint8_t> bytes, Network& network, std::s
 // Datos de la red embebida al compilar; vacio si no se integro ninguna.
 std::span<const std::uint8_t> embedded_network();
 
-}  // namespace enroque::nnue
+}  // namespace ayano::nnue

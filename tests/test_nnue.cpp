@@ -11,8 +11,8 @@
 #include "nnue/network.h"
 #include "test_framework.h"
 
-using namespace enroque;
-using namespace enroque::nnue;
+using namespace ayano;
+using namespace ayano::nnue;
 
 namespace {
 

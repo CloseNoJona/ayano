@@ -11,7 +11,7 @@
 #include "core/prng.h"
 #include "search/worker.h"
 
-namespace enroque {
+namespace ayano {
 
 struct SearchResult {
   Move best = Move::none();
@@ -67,4 +67,4 @@ class Engine {
   std::vector<Key> game_keys_;
 };
 
-}  // namespace enroque
+}  // namespace ayano

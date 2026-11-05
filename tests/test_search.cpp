@@ -11,7 +11,7 @@
 #include "search/tt.h"
 #include "test_framework.h"
 
-using namespace enroque;
+using namespace ayano;
 
 namespace {
 

@@ -4,10 +4,11 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 #include "board/position.h"
 
-namespace enroque::nnue {
+namespace ayano::nnue {
 
 enum class GameResult : std::uint8_t { Loss = 0, Draw = 1, Win = 2 };
 
@@ -34,7 +35,10 @@ struct UnpackedPosition {
 
 UnpackedPosition unpack_position(const PackedPosition& packed);
 
+// FEN del registro, sin enroques ni captura al paso, que el formato no guarda.
+std::string to_fen(const PackedPosition& packed);
+
 // Comprueba un registro leido de un archivo antes de usarlo para indexar la red.
 bool is_valid(const PackedPosition& packed);
 
-}  // namespace enroque::nnue
+}  // namespace ayano::nnue

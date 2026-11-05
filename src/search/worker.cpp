@@ -11,7 +11,7 @@
 #include "nnue/network.h"
 #include "search/params.h"
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
@@ -301,7 +301,7 @@ Value Worker::evaluate(int ply) {
   if (network) {
     value = accumulators_->evaluate(*network, ply,
                                     [this](int p) -> const StackEntry& { return *entry(p); });
-#ifdef ENROQUE_VERIFY_NNUE
+#ifdef AYANO_VERIFY_NNUE
     // Diagnostico: el camino incremental debe coincidir siempre con el recalculo.
     if (value != nnue::evaluate_from_scratch(*network, pos)) {
       std::cerr << "NNUE desincronizada en ply " << ply << ": " << pos.fen() << std::endl;
@@ -316,4 +316,4 @@ Value Worker::evaluate(int ply) {
   return std::clamp(value, VALUE_MATED_IN_MAX_PLY + 1, VALUE_MATE_IN_MAX_PLY - 1);
 }
 
-}  // namespace enroque
+}  // namespace ayano

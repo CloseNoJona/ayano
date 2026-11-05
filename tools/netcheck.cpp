@@ -8,7 +8,6 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -20,7 +19,7 @@
 #include "nnue/network.h"
 #include "nnue/training_data.h"
 
-using namespace enroque;
+using namespace ayano;
 
 namespace {
 
@@ -28,33 +27,6 @@ namespace {
 constexpr double kScale = 200.0;
 
 double sigmoid(double x) { return 1.0 / (1.0 + std::exp(-x)); }
-
-std::string to_fen(const nnue::PackedPosition& packed) {
-  const nnue::UnpackedPosition unpacked = nnue::unpack_position(packed);
-  std::array<char, 64> board{};
-  constexpr std::string_view kChars = "PpNnBbRrQqKk";
-  for (int i = 0; i < unpacked.count; ++i) {
-    board[unpacked.squares[std::size_t(i)]] = kChars[unpacked.pieces[std::size_t(i)]];
-  }
-  std::ostringstream fen;
-  for (int rank = 7; rank >= 0; --rank) {
-    int empty = 0;
-    for (int file = 0; file < 8; ++file) {
-      const char c = board[std::size_t(rank * 8 + file)];
-      if (!c) {
-        ++empty;
-        continue;
-      }
-      if (empty) fen << empty;
-      empty = 0;
-      fen << c;
-    }
-    if (empty) fen << empty;
-    if (rank) fen << '/';
-  }
-  fen << (unpacked.side_to_move == WHITE ? " w - - 0 1" : " b - - 0 1");
-  return fen.str();
-}
 
 struct Metrics {
   double result_error = 0;  // error cuadratico contra el resultado de la partida
@@ -119,7 +91,7 @@ int main(int argc, char** argv) {
     in.seekg(std::streamoff(rng.below(total) * sizeof(record)));
     in.read(reinterpret_cast<char*>(&record), sizeof(record));
     if (!in || !nnue::is_valid(record)) continue;
-    const auto pos = Position::from_fen(to_fen(record));
+    const auto pos = Position::from_fen(nnue::to_fen(record));
     if (!pos) continue;
     sample.push_back(record);
     positions.push_back(*pos);

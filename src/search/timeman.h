@@ -6,7 +6,7 @@
 
 #include "search/limits.h"
 
-namespace enroque {
+namespace ayano {
 
 class TimeManager {
  public:
@@ -25,4 +25,4 @@ class TimeManager {
   std::int64_t maximum_ms_ = 0;
 };
 
-}  // namespace enroque
+}  // namespace ayano

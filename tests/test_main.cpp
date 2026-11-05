@@ -17,8 +17,8 @@ int main(int argc, char** argv) {
     }
   }
 
-  enroque::attacks::init();
-  enroque::zobrist::init();
+  ayano::attacks::init();
+  ayano::zobrist::init();
 
   int executed = 0;
   for (const testfw::TestCase& test : testfw::registry()) {

@@ -10,7 +10,7 @@
 #include "board/position.h"
 #include "nnue/network.h"
 
-namespace enroque::nnue {
+namespace ayano::nnue {
 
 struct alignas(64) Accumulator {
   std::array<std::array<std::int16_t, kHidden>, COLOR_NB> values;
@@ -68,4 +68,4 @@ class AccumulatorStack {
   std::array<bool, MAX_PLY + 2> null_move_{};
 };
 
-}  // namespace enroque::nnue
+}  // namespace ayano::nnue

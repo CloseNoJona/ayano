@@ -5,7 +5,7 @@
 #include <optional>
 #include <string_view>
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
@@ -53,4 +53,4 @@ BenchResult run_bench(Engine& engine, int depth) {
   return result;
 }
 
-}  // namespace enroque
+}  // namespace ayano

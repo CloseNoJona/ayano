@@ -1,9 +1,10 @@
-# Arquitectura de Enroque
+# Arquitectura de Ayano
 
-Enroque es un motor UCI escrito desde cero en C++20. Usa las mismas técnicas que los
+Ayano es un motor UCI escrito desde cero en C++20. Usa las mismas técnicas que los
 motores modernos de primer nivel: bitboards, búsqueda alfa-beta con podas agresivas y
-evaluación con una red NNUE. El código es original y las técnicas están descritas
-públicamente, sobre todo en la [Chess Programming Wiki](https://www.chessprogramming.org).
+evaluación con una red NNUE. Las técnicas están descritas públicamente, sobre todo en la
+[Chess Programming Wiki](https://www.chessprogramming.org). El código lo escribió una IA: el
+[README](../README.md#cómo-se-hizo) explica cómo se hizo.
 
 ## Mapa del código
 
@@ -16,7 +17,7 @@ públicamente, sobre todo en la [Chess Programming Wiki](https://www.chessprogra
 | `src/train` | Entrenador de la red en CPU |
 | `src/search` | Búsqueda, hilos, tabla de transposición, historiales, tiempo |
 | `src/uci` | Protocolo UCI y benchmark |
-| `tools` | `datagen`, `train`, `match`, `solve`, `netcheck` |
+| `tools` | `datagen`, `train`, `match`, `solve`, `netcheck`, `tune_pst` |
 | `tests` | Tests unitarios y de propiedades |
 
 ## Decisiones de diseño
@@ -164,6 +165,24 @@ millones de posiciones vienen de pocas decenas de miles de partidas, y todas las
 partida comparten un único resultado, de modo que la red memoriza ruido. Con muchas más
 partidas la mezcla podría volver a compensar.
 
+## Evaluación clásica
+
+Combina material, tablas de casillas, estructura de peones, movilidad, seguridad del rey y una
+interpolación entre medio juego y final. Solo se usa si no hay red, y sirvió para arrancar el
+entrenamiento. La red y ella nunca se mezclan: cada posición se evalúa con una u otra.
+
+Sus tablas de material y casillas las genera `tools/tune_pst`. Parte de cero y ajusta una regresión
+logística para que la evaluación prediga la puntuación de la búsqueda, con 2 millones de posiciones
+de gen2 y gen3. Sustituyeron a las de PeSTO, con las que se jugaron las primeras partidas de
+entrenamiento.
+
+| Tablas | Error de predicción en validación | Partidas a 20 000 nodos |
+|---|---|---|
+| PeSTO | 0,00996 | Referencia |
+| `tune_pst` | 0,00973 | +244 =115 −241: +2 ± 25 Elo |
+
+Predicen algo mejor y juegan igual. La huella `bench` no cambia, porque la búsqueda usa la red.
+
 ## Cómo se verifica
 
 | Comprobación | Qué garantiza |
@@ -175,10 +194,12 @@ partidas la mezcla podría volver a compensar.
 | Gradiente contra diferencias finitas | La retropropagación es correcta |
 | Red cuantizada contra red flotante | La cuantización no altera la fórmula |
 | Compilación con AddressSanitizer | No hay accesos inválidos a memoria |
-| Compilación con `ENROQUE_VERIFY_NNUE` | La red no se desincroniza durante una búsqueda real |
+| Compilación con `AYANO_VERIFY_NNUE` | La red no se desincroniza durante una búsqueda real |
 | Compilación portable | El camino sin AVX2 ni PEXT también es correcto |
 | `bench` | Huella que detecta cambios involuntarios en la búsqueda |
 | `bench` en cada variante | Release, portable, AVX2 sin PEXT y PGO recorren los mismos nodos |
+| Compilación con g++ en Linux | Sus tres variantes pasan los tests y recorren los mismos nodos que con MSVC |
+| `scripts/similarity.py` contra 15 motores | Solo coinciden fragmentos de pocas líneas, un 0,5 % de los tokens |
 | `match` con SPRT | Cada mejora se confirma jugando, no por intuición |
 | `match` contra Stockfish limitado | Sitúa al motor en una escala externa |
 
@@ -226,7 +247,7 @@ mientras el resto del equipo ocupaba unos dos.
 
 Los dos niveles confirman la subida: en el ajuste conjunto es de +202, de +135 a +273, con un 95 %
 de confianza. Su causa no se ha aislado. Una candidata es que limitar por nodos perjudicaba a
-Enroque: un millón de nodos le dura unos 0,4 s y a Stockfish limitado cerca de 1 s, mientras que
+Ayano: un millón de nodos le dura unos 0,4 s y a Stockfish limitado cerca de 1 s, mientras que
 con reloj ambos disponen del mismo tiempo.
 
 Lo que no está claro es el tamaño de la subida. El ajuste conjunto da 3216, de 3156 a 3275, pero un

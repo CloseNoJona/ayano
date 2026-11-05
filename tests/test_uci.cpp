@@ -10,7 +10,7 @@
 #include "test_framework.h"
 #include "uci/uci.h"
 
-using namespace enroque;
+using namespace ayano;
 
 namespace {
 
@@ -73,7 +73,7 @@ constexpr const char* kStartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w
 TEST(uci_se_identifica_y_declara_opciones) {
   UciSession session;
   const std::string reply = session.run("uci");
-  CHECK(contains(reply, "id name Enroque"));
+  CHECK(contains(reply, "id name Ayano"));
   CHECK(contains(reply, "id author"));
   CHECK(contains(reply, "option name Hash"));
   CHECK(contains(reply, "option name Threads"));

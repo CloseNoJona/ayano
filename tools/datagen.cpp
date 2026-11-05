@@ -27,7 +27,7 @@
 #include <windows.h>
 #endif
 
-using namespace enroque;
+using namespace ayano;
 using nnue::GameResult;
 using nnue::PackedPosition;
 

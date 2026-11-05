@@ -9,7 +9,7 @@
 #include <xmmintrin.h>
 #endif
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
@@ -156,4 +156,4 @@ int TranspositionTable::hashfull() const {
   return int(used * 1000 / (sample * kBucketSize));
 }
 
-}  // namespace enroque
+}  // namespace ayano

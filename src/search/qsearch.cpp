@@ -6,7 +6,7 @@
 #include "search/params.h"
 #include "search/worker.h"
 
-namespace enroque {
+namespace ayano {
 
 struct QNode {
   StackEntry* ss;
@@ -153,4 +153,4 @@ Value Worker::qsearch(int ply, Value alpha, Value beta) {
 template Value Worker::qsearch<true>(int, Value, Value);
 template Value Worker::qsearch<false>(int, Value, Value);
 
-}  // namespace enroque
+}  // namespace ayano

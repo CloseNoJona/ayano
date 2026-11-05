@@ -2,7 +2,7 @@
 // una casilla gana al menos `threshold`, sin mover piezas de verdad.
 #include "board/position.h"
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
@@ -61,4 +61,4 @@ bool Position::see_ge(Move m, Value threshold) const {
   return side != stm_;
 }
 
-}  // namespace enroque
+}  // namespace ayano

@@ -5,11 +5,11 @@
 
 #include "board/position.h"
 
-namespace enroque {
+namespace ayano {
 
 std::uint64_t perft(const Position& pos, int depth);
 
 // Imprime el recuento por cada jugada de la raiz y devuelve el total.
 std::uint64_t perft_divide(const Position& pos, int depth);
 
-}  // namespace enroque
+}  // namespace ayano

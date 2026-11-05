@@ -1,6 +1,6 @@
 #include "core/types.h"
 
-namespace enroque {
+namespace ayano {
 
 std::string square_to_string(Square s) {
   std::string text;
@@ -17,4 +17,4 @@ std::string Move::to_uci() const {
   return text;
 }
 
-}  // namespace enroque
+}  // namespace ayano

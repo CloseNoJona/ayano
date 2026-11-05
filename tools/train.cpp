@@ -18,7 +18,7 @@
 #include "core/zobrist.h"
 #include "train/trainer.h"
 
-using namespace enroque;
+using namespace ayano;
 
 namespace {
 

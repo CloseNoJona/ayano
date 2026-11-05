@@ -6,7 +6,7 @@
 
 #include "search/engine.h"
 
-namespace enroque {
+namespace ayano {
 
 inline constexpr int kDefaultBenchDepth = 13;
 
@@ -21,4 +21,4 @@ struct BenchResult {
 
 BenchResult run_bench(Engine& engine, int depth);
 
-}  // namespace enroque
+}  // namespace ayano

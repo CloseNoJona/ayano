@@ -1,6 +1,6 @@
 #include "board/movegen.h"
 
-namespace enroque {
+namespace ayano {
 
 namespace {
 
@@ -218,4 +218,4 @@ Move parse_uci_move(const Position& pos, std::string_view text) {
   return Move::none();
 }
 
-}  // namespace enroque
+}  // namespace ayano
