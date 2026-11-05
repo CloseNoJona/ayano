@@ -18,6 +18,7 @@ evaluación con una red NNUE. Las técnicas están descritas públicamente, sobr
 | `src/search` | Búsqueda, hilos, tabla de transposición, historiales, tiempo |
 | `src/uci` | Protocolo UCI y benchmark |
 | `tools` | `datagen`, `train`, `match`, `solve`, `netcheck`, `tune_pst` |
+| `scripts` | Compilación, ciclo de entrenamiento, ajuste de parámetros, comparación de código |
 | `tests` | Tests unitarios y de propiedades |
 
 ## Decisiones de diseño
@@ -90,6 +91,26 @@ Historiales: mariposa (origen-destino), capturas, continuación a 1, 2, 4 y 6 me
 jugadas, estructura de peones, jugadas asesinas, respuesta a la jugada anterior y corrección
 de la evaluación por peones, piezas menores y resto de piezas.
 
+### Ajuste de los parámetros
+
+Los números de la búsqueda están en `src/search/params.h`. Los 35 con margen para moverse se
+ajustaron con SPSA ([scripts/spsa.py](../scripts/spsa.py)): en cada iteración, dos copias del motor
+juegan con los parámetros desplazados en sentidos opuestos, y los valores avanzan hacia la que gana.
+Fueron 2500 iteraciones de 8 partidas a 30 000 nodos por jugada, con la red gen3.
+
+SPSA mueve los parámetros aunque no haya nada que ganar, así que solo cuenta lo que se midió
+después, en matches aparte con otras aperturas. La red es gen3 en los dos bandos:
+
+| Nodos por jugada | Partidas | Resultado | Elo |
+|---|---|---|---|
+| 30 000, los del ajuste | 1000 | +351 =367 −282 | +24 ± 17 |
+| 200 000 | 600 | +181 =303 −116 | +38 ± 20 |
+
+Los mayores cambios podan más las jugadas tranquilas (`kFutilityBase` baja de 95 a 73), menos las
+capturas (`kCaptureFutilityPerDepth` sube de 190 a 232) y castigan más en los historiales a las
+jugadas que no cortaron (`kHistoryMalusScale` sube de 200 a 252). Ninguno llegó a sus límites.
+El ajuste se hizo antes de tener gen4 y no se ha repetido con esa red.
+
 ## Red NNUE
 
 ```
@@ -133,6 +154,7 @@ ni dato procede de otro motor.
 | gen1 | 5,1 millones | 7,9 millones | +126 ± 31 | Sin medir |
 | gen2 | 9,7 millones | 17,6 millones | +75 ± 29 | +111 ± 16 |
 | gen3 | 6,1 millones | 23,7 millones | +30 ± 29 | +39 ± 16 |
+| gen4 | 19,2 millones | 42,9 millones | +85 ± 19 | Sin medir sola |
 
 La ventaja de gen2 sobre gen1 crece con el tiempo de reflexión: +75 ± 29 a 10 000 nodos,
 +90 ± 17 a 1 s + 0,01 y +111 ± 16 a 5 s + 0,05. Una evaluación mejor pesa más cuanto más
@@ -142,6 +164,13 @@ gen3 mejora menos que gen2. También aportó menos posiciones nuevas, pero no se
 pesó eso. A 10 000 nodos su ventaja apenas supera el margen de error; fueron las 1000 partidas
 con reloj las que la confirmaron. Contra Stockfish esa ventaja no se aprecia: ver
 [Fuerza absoluta](#fuerza-absoluta).
+
+gen4 da un salto mucho mayor: con la misma búsqueda en los dos bandos gana a gen3 por +85 ± 19 a
+10 000 nodos y por +87 ± 17 a 100 000. Es la generación que más posiciones aportó, lo que apunta a
+que los datos eran el freno, aunque no se ha aislado: también aprendió de partidas de una red mejor.
+Con reloj solo se midió el conjunto: gen4 con la búsqueda ajustada gana a gen3 con la búsqueda
+anterior por +113 ± 17 a 5 s + 0,05, con +456 =401 −143 en 1000 partidas. A diferencia de lo que
+pasó con gen3, esta mejora también se ve contra Stockfish: ver [Fuerza absoluta](#fuerza-absoluta).
 
 ### Qué se midió al entrenar
 
@@ -156,14 +185,15 @@ son de partidas a igual número de nodos, con margen de error del 95 %, salvo qu
 | ¿Mezclar el resultado con K calibrada? | −61 ± 43 contra K=400 sin mezcla, unos −108 respecto a K=140 sin mezcla | No mezclar |
 | ¿Cuántas neuronas? | 256: −23 ± 38. 1024: −22 ± 38 y un 25 % más lenta | 512 |
 | ¿Usar también datos de generaciones anteriores? | +126 ± 31 con todos, +113 ± 32 solo con los nuevos | Usar todos |
+| ¿Mezclar un 25 % del resultado con K=140, ya con más datos? | −3,5 ± 18 contra gen3 con 23,7 millones de posiciones, a 30 000 nodos; −2 ± 17 contra no mezclar con 42,9 millones, a 100 000 | No mezclar: ya no perjudica, pero tampoco mejora |
 
 La primera red mezclaba el resultado y perdía por 150 Elo pese a tener una pérdida baja. Hay
 dos causas. La primera es de escala: en estas partidas una ventaja de 250 cp gana el 85 % de
 las veces, mientras que `sigmoide(x / 400)` predice un 65 %, así que la mezcla inflaba las
 evaluaciones y los márgenes de poda dejaban de tener sentido. La segunda es de cantidad: unos
 millones de posiciones vienen de pocas decenas de miles de partidas, y todas las de una
-partida comparten un único resultado, de modo que la red memoriza ruido. Con muchas más
-partidas la mezcla podría volver a compensar.
+partida comparten un único resultado, de modo que la red memoriza ruido. Con 42,9 millones de
+posiciones la mezcla ya no perjudica, pero aún no compensa.
 
 ## Evaluación clásica
 
@@ -210,29 +240,37 @@ a CCRL 40/4. Las redes jugaron contra varios niveles, con aperturas al azar de 8
 un millón de nodos por jugada para cada motor. Limitar por nodos hace que el resultado no dependa
 de la carga de la máquina.
 
-| Rival | gen3 | gen2 |
-|---|---|---|
-| `UCI_Elo` 2800 | Sin medir | +32 =5 −3 |
-| `UCI_Elo` 3000, primera tanda | +40 =28 −32 | +22 =10 −8 |
-| `UCI_Elo` 3000, las dos a la vez | +37 =29 −34 | +35 =33 −32 |
-| `UCI_Elo` 3190 | +6 =38 −56 | +13 =31 −56 |
-| **Elo estimado** | **3014** (de 2981 a 3047) | **3045** (de 3010 a 3080) |
+| Rival | gen4 con la búsqueda ajustada | gen3 | gen2 |
+|---|---|---|---|
+| `UCI_Elo` 2800 | Sin medir | Sin medir | +32 =5 −3 |
+| `UCI_Elo` 3000, primera tanda | +53 =18 −29 | +40 =28 −32 | +22 =10 −8 |
+| `UCI_Elo` 3000, segunda tanda | +42 =38 −20 | +37 =29 −34 | +35 =33 −32 |
+| `UCI_Elo` 3190 | +16 =38 −46 | +6 =38 −56 | +13 =31 −56 |
+| **Elo estimado** | **3082** (de 3050 a 3115) | **3014** (de 2981 a 3047) | **3045** (de 3010 a 3080) |
 
 Un ajuste por máxima verosimilitud, con las tablas como medio punto, busca el Elo que mejor
-explica los resultados de cada red. El intervalo del 95 % sale de remuestrear las partidas. En
-gen3 los dos niveles coinciden: por separado dan 3019 y 2999.
+explica los resultados de cada red. El intervalo del 95 % sale de remuestrear las partidas. Los
+dos niveles coinciden: por separado dan 3081 y 3082 en gen4, y 3019 y 2999 en gen3.
+
+gen4 con la búsqueda ajustada saca +68 Elo a gen3 con la búsqueda anterior, de +21 a +115, y solo un
+0,3 % de los remuestreos no muestra mejora. Repitió las aperturas de gen3 y puntuó más en los tres
+encuentros: del 25 % al 35 % contra el nivel 3190, y del 54 % y 51,5 % al 62 % y 61 % contra el 3000.
+El margen trata las dos muestras como independientes, así que es algo más ancho que el real. La
+cifra es del conjunto: la red y la búsqueda no se midieron por separado contra Stockfish.
 
 gen3 gana a gen2 por +39 ± 16 en duelo directo, pero contra Stockfish esa mejora no se ve: la
-diferencia es de −31 ± 48. Cuando las dos jugaron a la vez, con las mismas aperturas, ambas
-puntuaron un 51,5 %. Esos datos no bastan para decir que gen2 sea mejor, así que gen3 sigue
-integrada. Una explicación posible es que gen3 aprendió de partidas de gen2 y puede ganarle sin
-ganar lo mismo a un motor distinto, pero no se ha demostrado. Por eso conviene medir cada red
-nueva también contra un rival externo.
+diferencia es de −31 ± 48. Cuando las dos jugaron a la vez, en la segunda tanda y con las mismas
+aperturas, ambas puntuaron un 51,5 %. Esos datos no bastan para decir que gen2 fuera mejor, así que
+gen3 siguió integrada hasta gen4. Una explicación posible es que gen3 aprendió de partidas de gen2
+y puede ganarle sin ganar lo mismo a un motor distinto, pero no se ha demostrado. Por eso conviene
+medir cada red nueva también contra un rival externo.
 
 Las tandas cortas engañan. La primera medida de gen2 dio 3068, con un 67,5 % en 40 partidas
 contra el nivel 3000. Al repetirla con 100 partidas, ese porcentaje bajó al 51,5 %.
 
 ### Fuerza a 120 s + 1 s
+
+Esta medida es de gen3 con la búsqueda anterior: gen4 aún no ha jugado a este ritmo.
 
 gen3 jugó también con reloj, al ritmo de la calibración. Cada motor tuvo un hilo y 64 MB de hash,
 las aperturas fueron las de la medida anterior y se jugaron cinco partidas a la vez en los seis

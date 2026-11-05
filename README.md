@@ -10,6 +10,10 @@ mediante el protocolo UCI.
 **Lo escribió una IA:** Claude, de Anthropic, programó el motor, entrenó sus redes y midió su
 fuerza. Los detalles están en [Cómo se hizo](#cómo-se-hizo).
 
+**Es una versión preliminar:** toda su fuerza se ha medido en un solo equipo y aún no ha jugado fuera
+de él. Será la 1.0 cuando se haya probado contra otros rivales y en otros equipos. La versión 0.8.0
+se publicó primero como 1.0, y sus archivos conservan ese nombre.
+
 *English summary: [see below](#english-summary).*
 
 ## Resultados
@@ -19,24 +23,24 @@ error del 95 %.
 
 ### Fuerza absoluta
 
-La regla es la escala `UCI_Elo` de Stockfish 19. Con la red gen3, la cifra de Ayano depende del
-ritmo de juego: ronda los **3015 ± 35 Elo** con un millón de nodos por jugada y queda **entre 3155
-y 3320** a 120 s + 1 s, el ritmo al que Stockfish calibró la escala.
+La regla es la escala `UCI_Elo` de Stockfish 19. Ayano 0.9.0, con la red gen4 y la búsqueda ajustada,
+ronda los **3080 ± 35 Elo** con un millón de nodos por jugada. La versión anterior, 0.8.0, con la red
+gen3, da 3015 ± 35 en las mismas condiciones: la mejora es de **+68 Elo**, de +21 a +115.
 
-| Rival | Un millón de nodos por jugada | 120 s + 1 s |
+| Rival, con un millón de nodos por jugada | 0.9.0 | 0.8.0 |
 |---|---|---|
-| Stockfish 19 con `UCI_Elo` 3000 | +77 =57 −66 en 200 partidas: +19 ± 41 | +31 =7 −2 en 40 partidas: +319 ± 142 |
-| Stockfish 19 con `UCI_Elo` 3190, el máximo | +6 =38 −56 en 100 partidas: −191 ± 56 | +10 =16 −14 en 40 partidas: −35 ± 85 |
+| Stockfish 19 con `UCI_Elo` 3000 | +95 =56 −49 en 200 partidas: +81 ± 42 | +77 =57 −66 en 200 partidas: +19 ± 41 |
+| Stockfish 19 con `UCI_Elo` 3190, el máximo | +16 =38 −46 en 100 partidas: −108 ± 55 | +6 =38 −56 en 100 partidas: −191 ± 56 |
 
-La primera cifra es la más sólida: son 300 partidas, no depende de la carga de la máquina y los
-dos niveles coinciden. La segunda es un rango porque, con solo 80 partidas, cada nivel da una
-cifra distinta: 3319 contra 3000 y 3155 contra 3190. La subida está confirmada; su tamaño, no.
+Cada versión jugó 300 partidas con las mismas aperturas. El resultado no depende de la carga de la
+máquina y los dos niveles coinciden: 3081 contra 3000 y 3082 contra 3190.
+
+La versión 0.8.0 también jugó a 120 s + 1 s, el ritmo al que Stockfish calibró la escala, y quedó
+**entre 3155 y 3320**, con solo 80 partidas: +31 =7 −2 contra el nivel 3000 y +10 =16 −14 contra el
+3190. La 0.9.0 aún no se ha medido a ese ritmo.
 
 Son referencias, no ratings de CCRL ni Elo humano. Los márgenes solo recogen el azar de las
-partidas. Stockfish sin limitar es mucho más fuerte y no se ha medido.
-
-A un millón de nodos, gen3 no se distingue de gen2, que da 3045 ± 35. La ventaja de gen3 solo se
-ha comprobado en el duelo directo entre ambas. El detalle está en
+partidas. Stockfish sin limitar es mucho más fuerte y no se ha medido. El detalle está en
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#fuerza-absoluta).
 
 ### Fuerza relativa
@@ -46,17 +50,20 @@ otros rivales.
 
 | Partidas con 5 s por bando y 0,05 s de incremento | Partidas | Resultado |
 |---|---|---|
+| Ayano 0.9.0 contra 0.8.0 | 1000 | **+113 ± 17 Elo** |
 | Red gen3 contra la evaluación clásica, con sus tablas anteriores | 160 | **+364 ± 71 Elo** |
 | Red gen3 contra la red gen2 | 1000 | **+39 ± 16 Elo** |
 | 4 hilos contra 1 hilo | 100 | **+151 ± 53 Elo** |
+
+Las tres últimas filas son anteriores a gen4.
 
 ### Otras medidas
 
 | Medida | Resultado |
 |---|---|
 | Velocidad con la red | 2,5 millones de nodos por segundo y hilo |
-| Profundidad completada desde la posición inicial | 23 en 5 segundos |
-| Bratko-Kopec, 2 s y 2 hilos | 19 de 24 |
+| Profundidad completada desde la posición inicial | 26 en 5 segundos |
+| Bratko-Kopec, 2 s y 2 hilos | 19 y 20 de 24, en dos pasadas |
 | Perft | Exacto en toda la suite, unos 800 millones de nodos |
 
 ## Descargar
@@ -194,12 +201,23 @@ netcheck --data data\gen0.bin --net nets\gen2.nnue
 tune_pst --data data\gen2.bin --data data\gen3.bin --output src\eval\pst.h
 ```
 
+**Ajustar los parámetros de la búsqueda** con SPSA. Necesita la compilación `scripts\build.cmd tune`,
+que los expone como opciones UCI:
+
+```bash
+python scripts\spsa.py --engine build\tune\ayano.exe --match build\tune\match.exe --state spsa.json --iterations 2500
+```
+
+Se puede interrumpir: con el mismo `--state` continúa donde iba. Al terminar imprime los valores para
+`src\search\params.h`. SPSA mueve los parámetros aunque no haya nada que ganar, así que solo valen si
+ganan después a los anteriores en un match aparte.
+
 ## Entrenar una red nueva
 
 El ciclo completo (jugar, entrenar y comparar) es un solo comando:
 
 ```bash
-powershell -File scripts\new_generation.ps1 -Name gen4 -Minutes 60
+powershell -File scripts\new_generation.ps1 -Name gen5 -Minutes 60
 ```
 
 Cada generación necesita un nombre nuevo. Si la red nueva gana, cópiala a `nets\default.nnue` y
@@ -261,6 +279,10 @@ side, 8 output buckets) trained only on its own self-play games, with no data fr
 Code, trained the networks, measured its strength and wrote the documentation. Jonathan Garcia
 proposed the project, provided the hardware and decided what to measure and publish.
 
+**This is a preliminary version.** All its strength figures come from a single machine, and it has
+not yet played anywhere else. It will become 1.0 once it has been tested against other opponents and
+on other machines. Version 0.8.0 was first published as 1.0, and its files keep that name.
+
 No code from other engines was opened while writing it. An AI can still reproduce from memory what
 it saw in training, so the code was compared with [scripts/similarity.py](scripts/similarity.py)
 against 15 engines, including Stockfish 19, Ethereal, Berserk, Koivisto and Stormphrax. About 0.5 %
@@ -273,9 +295,10 @@ and was raised in isolation in the White Room, just as this network learned only
 games. During development the engine was called Enroque.
 
 Strength was measured against Stockfish 19 with `UCI_LimitStrength`, one thread and 64 MB of hash
-per engine, on an AMD Ryzen 5 5600. The result was about 3015 ± 35 on the `UCI_Elo` scale at one
-million nodes per move, and between 3155 and 3320 at 120 s + 1 s, from only 80 games. These are not
-CCRL ratings.
+per engine, on an AMD Ryzen 5 5600. Ayano 0.9.0 scored about 3080 ± 35 on the `UCI_Elo` scale at one
+million nodes per move, up from about 3015 ± 35 for version 0.8.0. Version 0.8.0 also scored between
+3155 and 3320 at 120 s + 1 s, from only 80 games; 0.9.0 has not been measured at that time control.
+These are not CCRL ratings.
 
 Windows and Linux binaries are on the
 [latest release](https://github.com/CloseNoJona/ayano/releases/latest). Pick `bmi2` for most CPUs,

@@ -16,7 +16,7 @@ namespace ayano {
 
 namespace {
 
-constexpr const char* kEngineName = "Ayano 1.0";
+constexpr const char* kEngineName = "Ayano 0.9.0";
 constexpr const char* kEngineAuthor = "Jonathan Garcia y Claude";
 constexpr int kMaxHashMb = 65536;
 constexpr int kMaxThreads = 256;
