@@ -14,20 +14,24 @@ error del 95 %.
 
 ### Fuerza absoluta
 
-Con la red gen3, Enroque ronda los **3015 ± 35 Elo** en la escala `UCI_Elo` de Stockfish 19.
-Cada motor dispuso de un millón de nodos por jugada, unos 0,4 s para Enroque.
+La regla es la escala `UCI_Elo` de Stockfish 19. Con la red gen3, la cifra de Enroque depende del
+ritmo de juego: ronda los **3015 ± 35 Elo** con un millón de nodos por jugada y queda **entre 3155
+y 3320** a 120 s + 1 s, el ritmo al que Stockfish calibró la escala.
 
-| Rival | Partidas | Resultado de Enroque | Diferencia |
-|---|---|---|---|
-| Stockfish 19 con `UCI_Elo` 3000 | 200 | +77 =57 −66 | +19 ± 41 |
-| Stockfish 19 con `UCI_Elo` 3190, el máximo | 100 | +6 =38 −56 | −191 ± 56 |
+| Rival | Un millón de nodos por jugada | 120 s + 1 s |
+|---|---|---|
+| Stockfish 19 con `UCI_Elo` 3000 | +77 =57 −66 en 200 partidas: +19 ± 41 | +31 =7 −2 en 40 partidas: +319 ± 142 |
+| Stockfish 19 con `UCI_Elo` 3190, el máximo | +6 =38 −56 en 100 partidas: −191 ± 56 | +10 =16 −14 en 40 partidas: −35 ± 85 |
 
-Es una referencia, no un rating de CCRL ni un Elo humano. El margen solo recoge el azar de las
-partidas: Stockfish calibró esa escala a 120 s + 1 s, no a esta velocidad. Stockfish sin limitar
-es mucho más fuerte y no se ha medido.
+La primera cifra es la más sólida: son 300 partidas, no depende de la carga de la máquina y los
+dos niveles coinciden. La segunda es un rango porque, con solo 80 partidas, cada nivel da una
+cifra distinta: 3319 contra 3000 y 3155 contra 3190. La subida está confirmada; su tamaño, no.
 
-Contra este rival, gen3 no se distingue de gen2, que da 3045 ± 35. La ventaja de gen3 solo se ha
-comprobado en el duelo directo entre ambas. El detalle está en
+Son referencias, no ratings de CCRL ni Elo humano. Los márgenes solo recogen el azar de las
+partidas. Stockfish sin limitar es mucho más fuerte y no se ha medido.
+
+A un millón de nodos, gen3 no se distingue de gen2, que da 3045 ± 35. La ventaja de gen3 solo se
+ha comprobado en el duelo directo entre ambas. El detalle está en
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#fuerza-absoluta).
 
 ### Fuerza relativa
@@ -137,6 +141,9 @@ altera el resultado:
 ```bash
 match --engine1 enroque.exe --engine2 stockfish.exe --opt2 "UCI_LimitStrength=true;UCI_Elo=3000;Hash=64" --games 100 --concurrency 4 --nodes 1000000
 ```
+
+Para medir con reloj, cambia `--nodes 1000000` por `--tc 120+1`, deja la máquina libre y juega
+menos partidas a la vez que núcleos tenga.
 
 **Medir la resolución de posiciones tácticas:**
 

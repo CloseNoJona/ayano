@@ -211,10 +211,36 @@ nueva también contra un rival externo.
 Las tandas cortas engañan. La primera medida de gen2 dio 3068, con un 67,5 % en 40 partidas
 contra el nivel 3000. Al repetirla con 100 partidas, ese porcentaje bajó al 51,5 %.
 
-El intervalo solo recoge el azar de las partidas. Quedan dos incertidumbres mayores:
+### Fuerza a 120 s + 1 s
 
-- **La velocidad.** La escala se calibró a 120 s + 1 s y aquí cada jugada duró unos 0,4 s. Con
-  más tiempo la diferencia puede cambiar; no se ha medido.
+gen3 jugó también con reloj, al ritmo de la calibración. Cada motor tuvo un hilo y 64 MB de hash,
+las aperturas fueron las de la medida anterior y se jugaron cinco partidas a la vez en los seis
+núcleos. Ninguna partida se perdió por tiempo; el margen mínimo de reloj fue de 246 ms. Un registro
+por minuto muestra que los motores dispusieron de sus cinco núcleos hasta las últimas partidas,
+mientras el resto del equipo ocupaba unos dos.
+
+| Rival | Partidas | Resultado | Elo que implica | Cambio respecto a nodos fijos |
+|---|---|---|---|---|
+| `UCI_Elo` 3000 | 40 | +31 =7 −2 | 3319 (de 3215 a 3470) | +300 (de +184 a +468) |
+| `UCI_Elo` 3190 | 40 | +10 =16 −14 | 3155 (de 3063 a 3243) | +156 (de +56 a +258) |
+
+Los dos niveles confirman la subida: en el ajuste conjunto es de +202, de +135 a +273, con un 95 %
+de confianza. Su causa no se ha aislado. Una candidata es que limitar por nodos perjudicaba a
+Enroque: un millón de nodos le dura unos 0,4 s y a Stockfish limitado cerca de 1 s, mientras que
+con reloj ambos disponen del mismo tiempo.
+
+Lo que no está claro es el tamaño de la subida. El ajuste conjunto da 3216, de 3156 a 3275, pero un
+solo Elo no explica bien los dos niveles: una discrepancia así solo aparecería por azar 1 de cada
+40 veces. Puede ser azar, o que para este rival y a este ritmo los niveles no disten 190 Elo. Por
+eso se publica un rango: el intervalo del ajuste conjunto sería demasiado estrecho, y 3216 ya queda
+por encima del máximo de la regla.
+
+### Límites de estas cifras
+
+Los intervalos solo recogen el azar de las partidas. Quedan dos incertidumbres mayores:
+
+- **La máquina.** La escala se calibró en otro equipo. Con reloj, un equipo más rápido da más
+  búsqueda a los dos motores, así que la cifra a 120 s + 1 s no tiene por qué repetirse en otro.
 - **El tipo de rival.** Stockfish limitado juega a propósito, con cierta probabilidad, una jugada
   peor. Eso no equivale a enfrentarse a un motor de esa fuerza, así que la cifra no es un rating
   de CCRL.
