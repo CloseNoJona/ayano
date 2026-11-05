@@ -43,6 +43,9 @@ try {
     throw "Ya existe una generacion llamada ${Name}: elige otro nombre"
   }
 
+  # La carpeta no viene en el repositorio, y datagen no la crea.
+  New-Item -ItemType Directory -Force data | Out-Null
+
   $seed = Get-Random -Maximum 1000000
   Write-Host "== 1/3 Generando datos durante $Minutes minutos con $CurrentNet"
   & "$bin\datagen.exe" --out "data\$Name.bin" --threads $Threads --nodes $Nodes `

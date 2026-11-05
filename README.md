@@ -71,8 +71,9 @@ no necesitan nada más. Elige según tu CPU:
 | `avx2` | AMD Ryzen 1000 a 3000, donde PEXT es lento |
 | `portable` | Cualquier CPU x86-64, sin AVX2 |
 
-Al arrancar, el motor comprueba que la CPU admite la variante elegida. Los ejecutables de Windows
-no están firmados, así que SmartScreen puede avisar al abrirlos.
+Si la CPU no admite la variante elegida, el motor avisa al arrancar, o se cierra sin mensaje si
+tampoco tiene AVX. En ambos casos, usa `portable`. Los ejecutables de Windows no están firmados, así
+que SmartScreen puede avisar al abrirlos.
 
 ## Compilar
 

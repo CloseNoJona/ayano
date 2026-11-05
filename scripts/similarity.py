@@ -17,7 +17,8 @@ TOKEN = re.compile(r'''
     /\*.*?\*/ | //[^\n]* |
     "(?:\\.|[^"\\\n])*" | '(?:\\.|[^'\\\n])*' |
     [A-Za-z_][A-Za-z0-9_]* |
-    0[xX][0-9a-fA-F'_]+[uUlL]* | \d[\d.'_]*(?:[eE][+-]?\d+)?[a-zA-Z]* |
+    0[xX][0-9a-fA-F'_]+(?:[uUiI](?:8|16|32|64|size)|[uUlL]*) |
+    \d[\d.'_]*(?:[eE][+-]?\d+)?(?:[a-zA-Z][a-zA-Z0-9]*)? |
     <<=|>>=|\.\.\.|::|->|\+\+|--|<<|>>|<=|>=|==|!=|&&|\|\||[-+*/%&|^]= |
     [{}()\[\];,<>=+\-*/%&|^~!?:.]
 ''', re.X | re.S)
@@ -66,8 +67,10 @@ def normalized(tokens):
 
 def number_value(token):
     text = re.sub(r"['_]", '', token).lower()
-    text = re.sub(r'(?<=[0-9a-f])(u|l|ul|ull|ll|i8|i16|i32|i64|u8|u16|u32|u64|f|usize|isize)$', '', text)
-    return text
+    suffixes = 'u|l|ul|ull|ll|i8|i16|i32|i64|u8|u16|u32|u64|usize|isize'
+    if not text.startswith('0x'):  # en hexadecimal, la f es una cifra
+        suffixes += '|f'
+    return re.sub(rf'(?<=[0-9a-f])({suffixes})$', '', text)
 
 
 def numbers_with_lines(tokens, lines):
@@ -77,7 +80,7 @@ def numbers_with_lines(tokens, lines):
 
 
 def load(root):
-    root = pathlib.Path(root)
+    root = pathlib.Path(root).resolve()
     files = []
     for path in sorted(root.rglob('*')):
         if path.suffix in SUFFIXES and path.is_file():
@@ -153,6 +156,8 @@ def compare(own, foreign, size, make_stream, label, top, keep=None):
 
 
 def main():
+    if len(sys.argv) < 3:
+        sys.exit(__doc__)
     own = [item for root in sys.argv[1].split(',') for item in load(root)]
     foreign = [item for root in sys.argv[2:] for item in load(root)]
     print(f'Propios: {len(own)} archivos. Ajenos: {len(foreign)} archivos, '
