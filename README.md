@@ -35,9 +35,17 @@ gen3, da 3015 ± 35 en las mismas condiciones: la mejora es de **+68 Elo**, de +
 Cada versión jugó 300 partidas con las mismas aperturas. El resultado no depende de la carga de la
 máquina y los dos niveles coinciden: 3081 contra 3000 y 3082 contra 3190.
 
-La versión 0.8.0 también jugó a 120 s + 1 s, el ritmo al que Stockfish calibró la escala, y quedó
-**entre 3155 y 3320**, con solo 80 partidas: +31 =7 −2 contra el nivel 3000 y +10 =16 −14 contra el
-3190. La 0.9.0 aún no se ha medido a ese ritmo.
+A 120 s + 1 s, el ritmo al que Stockfish calibró la escala, la 0.9.0 ronda los **3275, entre 3215
+y 3345**, con solo 80 partidas. Esa cifra pasa del máximo de la escala, así que es una
+extrapolación. La 0.8.0 quedó entre 3155 y 3320 con las mismas aperturas.
+
+| Rival, a 120 s + 1 s, 40 partidas | 0.9.0 | 0.8.0 |
+|---|---|---|
+| Stockfish 19 con `UCI_Elo` 3000 | +30 =7 −3 | +31 =7 −2 |
+| Stockfish 19 con `UCI_Elo` 3190, el máximo | +13 =23 −4 | +10 =16 −14 |
+
+Con tan pocas partidas, estas no confirman por sí solas la mejora sobre la 0.8.0: dan +60 Elo, de
+−27 a +147.
 
 Son referencias, no ratings de CCRL ni Elo humano. Los márgenes solo recogen el azar de las
 partidas. Stockfish sin limitar es mucho más fuerte y no se ha medido. El detalle está en
@@ -296,9 +304,9 @@ games. During development the engine was called Enroque.
 
 Strength was measured against Stockfish 19 with `UCI_LimitStrength`, one thread and 64 MB of hash
 per engine, on an AMD Ryzen 5 5600. Ayano 0.9.0 scored about 3080 ± 35 on the `UCI_Elo` scale at one
-million nodes per move, up from about 3015 ± 35 for version 0.8.0. Version 0.8.0 also scored between
-3155 and 3320 at 120 s + 1 s, from only 80 games; 0.9.0 has not been measured at that time control.
-These are not CCRL ratings.
+million nodes per move, up from about 3015 ± 35 for version 0.8.0. At 120 s + 1 s, from only 80
+games, 0.9.0 scored about 3275, between 3215 and 3345, and 0.8.0 between 3155 and 3320. Figures
+above 3190, the top of the scale, are extrapolations. These are not CCRL ratings.
 
 Windows and Linux binaries are on the
 [latest release](https://github.com/CloseNoJona/ayano/releases/latest). Pick `bmi2` for most CPUs,

@@ -270,29 +270,39 @@ contra el nivel 3000. Al repetirla con 100 partidas, ese porcentaje bajó al 51,
 
 ### Fuerza a 120 s + 1 s
 
-Esta medida es de gen3 con la búsqueda anterior: gen4 aún no ha jugado a este ritmo.
+Las dos versiones publicadas jugaron también con reloj, al ritmo de la calibración. Cada motor tuvo
+un hilo y 64 MB de hash, las dos versiones jugaron las mismas aperturas y se jugaron cinco partidas
+a la vez en los seis núcleos. Ninguna partida se perdió por tiempo; el margen mínimo de reloj fue de
+246 ms en los dos casos. Un registro por minuto muestra que los motores dispusieron de sus cinco
+núcleos hasta las últimas partidas, mientras el resto del equipo ocupaba poco más de uno con la
+0.9.0 y unos dos con la 0.8.0.
 
-gen3 jugó también con reloj, al ritmo de la calibración. Cada motor tuvo un hilo y 64 MB de hash,
-las aperturas fueron las de la medida anterior y se jugaron cinco partidas a la vez en los seis
-núcleos. Ninguna partida se perdió por tiempo; el margen mínimo de reloj fue de 246 ms. Un registro
-por minuto muestra que los motores dispusieron de sus cinco núcleos hasta las últimas partidas,
-mientras el resto del equipo ocupaba unos dos.
+| Versión | Rival | Partidas | Resultado | Elo que implica | Cambio respecto a nodos fijos |
+|---|---|---|---|---|---|
+| 0.9.0 | `UCI_Elo` 3000 | 40 | +30 =7 −3 | 3285 (de 3179 a 3436) | +203 (de +89 a +365) |
+| 0.9.0 | `UCI_Elo` 3190 | 40 | +13 =23 −4 | 3270 (de 3199 a 3348) | +187 (de +100 a +280) |
+| 0.8.0 | `UCI_Elo` 3000 | 40 | +31 =7 −2 | 3319 (de 3215 a 3470) | +300 (de +184 a +468) |
+| 0.8.0 | `UCI_Elo` 3190 | 40 | +10 =16 −14 | 3155 (de 3063 a 3243) | +156 (de +56 a +258) |
 
-| Rival | Partidas | Resultado | Elo que implica | Cambio respecto a nodos fijos |
-|---|---|---|---|---|
-| `UCI_Elo` 3000 | 40 | +31 =7 −2 | 3319 (de 3215 a 3470) | +300 (de +184 a +468) |
-| `UCI_Elo` 3190 | 40 | +10 =16 −14 | 3155 (de 3063 a 3243) | +156 (de +56 a +258) |
+Las dos versiones suben al pasar al reloj: +193 la 0.9.0, de +125 a +266, y +202 la 0.8.0, de +135
+a +273, en el ajuste conjunto y con un 95 % de confianza. Su causa no se ha aislado. Una candidata
+es que limitar por nodos perjudicaba a Ayano: un millón de nodos le dura unos 0,4 s y a Stockfish
+limitado cerca de 1 s, mientras que con reloj ambos disponen del mismo tiempo.
 
-Los dos niveles confirman la subida: en el ajuste conjunto es de +202, de +135 a +273, con un 95 %
-de confianza. Su causa no se ha aislado. Una candidata es que limitar por nodos perjudicaba a
-Ayano: un millón de nodos le dura unos 0,4 s y a Stockfish limitado cerca de 1 s, mientras que
-con reloj ambos disponen del mismo tiempo.
+En la 0.9.0 el ajuste conjunto da 3275, de 3216 a 3344, y un solo Elo explica bien los dos niveles,
+que coinciden con 3270 y 3285. El 61 % contra el nivel 3190, el máximo de la regla, indica que queda
+por encima de él, pero la cifra exacta es una extrapolación.
 
-Lo que no está claro es el tamaño de la subida. El ajuste conjunto da 3216, de 3156 a 3275, pero un
-solo Elo no explica bien los dos niveles: una discrepancia así solo aparecería por azar 1 de cada
-40 veces. Puede ser azar, o que para este rival y a este ritmo los niveles no disten 190 Elo. Por
-eso se publica un rango: el intervalo del ajuste conjunto sería demasiado estrecho, y 3216 ya queda
-por encima del máximo de la regla.
+En la 0.8.0 el ajuste conjunto da 3216, de 3156 a 3275, pero un solo Elo no explica bien los dos
+niveles: una discrepancia así solo aparecería por azar 1 de cada 40 veces. Por eso se publica un
+rango. Que la 0.9.0 no la repita apunta más al azar que a una regla mal espaciada a este ritmo,
+aunque no lo demuestra.
+
+La 0.9.0 saca +60 Elo a la 0.8.0, de −27 a +147, y un 9,5 % de los remuestreos no muestra mejora:
+estas 80 partidas por versión no bastan para confirmarla, aunque concuerdan con los +68 a nodos
+fijos. La diferencia viene del nivel 3190, donde pasa del 45 % al 61 %. Contra el 3000, las dos
+puntúan cerca del 85 %, una zona en la que la medida distingue poco. El margen trata las dos
+muestras como independientes, así que es algo más ancho que el real.
 
 ### Límites de estas cifras
 
