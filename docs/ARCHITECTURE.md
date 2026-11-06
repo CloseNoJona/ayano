@@ -68,6 +68,18 @@ El cambio no cuesta fuerza: +5 ± 15 Elo contra la versión anterior a 1 s + 0,0
 actúa. Antes de él, una de 200 partidas terminó con una anomalía cuyo motivo no quedó guardado;
 no se repitió en las 3800 siguientes y `match` ahora registra el contexto completo de cada una.
 
+Sin incremento hace falta algo más. Repartir una fracción del reloj lo acerca a cero, y cada jugada
+cuesta unos milisegundos aunque no se piense, por los retrasos de la interfaz y del sistema. Por
+eso, si el incremento no cubre `Move Overhead`, se guarda la diferencia multiplicada por 50 jugadas:
+500 ms con los valores por defecto. La reserva no pasa de 500 ms o de la mitad del reloj, lo que sea
+mayor, para que un margen grande no deje sin pensar toda la partida. Con un incremento que cubra
+`Move Overhead`, o con control de jugadas, no hay reserva.
+
+Con menos de 100 ms para la jugada, el motor solo envía el resultado final. En una posición sencilla
+completa decenas de iteraciones en pocos milisegundos, y la interfaz puede tardar más en leer esas
+líneas que el motor en escribirlas: esa demora se descuenta de su reloj. En un registro detallado de
+Cute Chess, con `MultiPV` 3, la lectura iba unos 60 ms por detrás del motor.
+
 ## Búsqueda
 
 Cada nodo sigue el mismo camino, separado en funciones pequeñas en `src/search/search.cpp`:
@@ -232,6 +244,47 @@ Predicen algo mejor y juegan igual. La huella `bench` no cambia, porque la búsq
 | `scripts/similarity.py` contra 15 motores | Solo coinciden fragmentos de pocas líneas, un 0,5 % de los tokens |
 | `match` con SPRT | Cada mejora se confirma jugando, no por intuición |
 | `match` contra Stockfish limitado | Sitúa al motor en una escala externa |
+| Cute Chess contra Stockfish limitado | El protocolo, el reloj y las PV funcionan en un gestor externo |
+
+### Prueba en Cute Chess
+
+Hasta la 0.9.0, el motor solo había jugado con `match`. Cute Chess 1.5.1 lo probó con incremento, con
+40 jugadas por control, con tiempo fijo por jugada, por profundidad y por nodos, desde posiciones
+FEN, con cuatro hilos, meditando en el turno rival y con las tres variantes de Windows. El rival fue
+Stockfish 19 limitado. Los ritmos son muy rápidos a propósito: aquí importan los fallos, no la fuerza.
+
+La 0.9.0 jugó 342 partidas sin ninguna jugada ilegal, cuelgue ni desconexión, también en la interfaz
+gráfica, pero aparecieron tres fallos:
+
+- **Perdía por tiempo sin incremento.** Ninguna medida publicada usaba ese ritmo. La causa y el
+  remedio están en [Tiempo con el reloj bajo](#tiempo-con-el-reloj-bajo).
+- **Enviaba jugadas ilegales en las PV.** Si la ventana nula devuelve un valor mayor o igual que beta
+  en un nodo PV, la búsqueda no se repite, y la línea heredaba restos de otra variante. Pasaba casi
+  siempre tras un mate, porque la poda por distancia al mate baja beta. Solo afectaba a lo que se
+  muestra, no a la jugada elegida. `match` no valida las PV; Cute Chess, sí.
+- **No aceptaba `debug` ni `register`.** Son comandos UCI, y respondía con un error inofensivo.
+
+La 0.9.1 los corrige. Con ella se repitieron las pruebas, en 726 partidas:
+
+| Prueba | 0.9.0 | 0.9.1 |
+|---|---|---|
+| Reloj agotado a 5 s por bando, sin incremento | 10 de 48 partidas | 0 de 48 |
+| Reloj agotado a 2 s por bando, sin incremento | 9 de 32 | 0 de 32 |
+| Reloj agotado a 1 s y a 30 s por bando, sin incremento | sin medir | 0 de 56 |
+| Avisos de PV ilegal | 202 en 338 partidas | 0 en 726 |
+
+Estas partidas sin incremento se jugaron sin el registro detallado de Cute Chess, porque ese registro
+retrasa la lectura y gasta reloj de los motores. En las 136 de la 0.9.1, Stockfish agotó el reloj 13
+veces.
+
+Contra la 0.9.0 compilada igual, a 5 s + 0,05 da +31 =131 −38 en 200 partidas, −12 ± 28 Elo: sin
+diferencia apreciable, como se esperaba. A 10 s sin incremento da +27 =57 −16 en 100 partidas,
++38 ± 45 Elo. Ahí la 0.9.0 agotó el reloj 13 veces y la 0.9.1, ninguna.
+
+Queda un caso sin resolver: con `MultiPV` 3 a 3 s + 0,03, la 0.9.1 agotó el reloj 1 vez en 48, en
+tablas tras 185 jugadas. Sin interfaz, el motor responde en 1,4 ms con 15 ms en el reloj, así que el
+retraso parece venir de fuera; no se ha aislado. La interfaz gráfica solo se probó con la 0.9.0, y
+Arena y otras interfaces siguen sin probarse.
 
 ### Fuerza absoluta
 

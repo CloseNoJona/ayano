@@ -16,7 +16,7 @@ namespace ayano {
 
 namespace {
 
-constexpr const char* kEngineName = "Ayano 0.9.0";
+constexpr const char* kEngineName = "Ayano 0.9.1";
 constexpr const char* kEngineAuthor = "Jonathan Garcia y Claude";
 constexpr int kMaxHashMb = 65536;
 constexpr int kMaxThreads = 256;
@@ -358,6 +358,9 @@ bool Uci::execute(const std::string& line) {
     stop_search();
     return false;
   }
+  // Son parte de UCI, pero Ayano no tiene modo de depuracion ni necesita registro.
+  if (command == "debug" || command == "register") return true;
+
   if (command == "uci") handle_uci();
   else if (command == "isready") send("readyok");
   else if (command == "ucinewgame") handle_new_game();

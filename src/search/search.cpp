@@ -402,6 +402,10 @@ Value Worker::search_candidate(Node& n, const Candidate& c, int extended_depth) 
   int new_depth = extended_depth;
   Value value = -VALUE_INFINITE;
 
+  // La ventana nula no escribe la linea del hijo: si corta sin repetir la busqueda PV, la
+  // variante debe acabar en esta jugada y no heredar los restos de otra.
+  if constexpr (kPv) pv_length_[std::size_t(ply)] = 0;
+
   if (n.depth >= 2 && n.move_count > 1 + int(kRoot)) {
     value = reduced_search(n, c, new_depth);
   } else if (!kPv || n.move_count > 1) {
@@ -409,7 +413,6 @@ Value Worker::search_candidate(Node& n, const Candidate& c, int extended_depth) 
   }
 
   if (kPv && (n.move_count == 1 || (value > alpha && (kRoot || value < beta)))) {
-    pv_length_[std::size_t(ply)] = 0;
     value = -search<NodeType::Pv>(ply, -beta, -alpha, new_depth, false);
   }
   return value;

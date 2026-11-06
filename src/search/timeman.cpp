@@ -9,6 +9,18 @@ namespace {
 constexpr std::int64_t kMinimumThinkMs = 1;
 constexpr int kDefaultMovesToGo = 28;
 constexpr int kMaxMovesToGo = 50;
+constexpr int kReservedMoves = 50;
+constexpr std::int64_t kMinimumReserveCapMs = 500;
+
+// Cada jugada cuesta reloj aunque no se piense, por los retrasos de la interfaz y del sistema.
+// Sin un incremento que lo cubra, repartir una fraccion del reloj lo lleva hasta casi cero y
+// las partidas largas se pierden por tiempo: hay que guardar para las jugadas futuras. Un
+// margen grande suele ser una precaucion, asi que no puede llevarse todo el reloj.
+std::int64_t future_moves_reserve(std::int64_t clock_ms, std::int64_t increment_ms,
+                                  int move_overhead_ms) {
+  const std::int64_t unpaid_overhead = std::max<std::int64_t>(move_overhead_ms - increment_ms, 0);
+  return std::min(unpaid_overhead * kReservedMoves, std::max(kMinimumReserveCapMs, clock_ms / 2));
+}
 
 }  // namespace
 
@@ -24,9 +36,13 @@ void TimeManager::start(const SearchLimits& limits, Color us, int game_ply, int 
   }
   if (!limits.uses_clock() || limits.infinite) return;
 
-  const std::int64_t remaining =
-      std::max(kMinimumThinkMs, limits.time_ms[us] - std::int64_t(move_overhead_ms));
   const std::int64_t increment = limits.increment_ms[us];
+  const std::int64_t reserve =
+      limits.moves_to_go > 0
+          ? 0
+          : future_moves_reserve(limits.time_ms[us], increment, move_overhead_ms);
+  const std::int64_t remaining =
+      std::max(kMinimumThinkMs, limits.time_ms[us] - std::int64_t(move_overhead_ms) - reserve);
 
   // Sin control fijo se estiman las jugadas restantes: al principio de la partida
   // quedan mas, asi que se reserva algo mas de tiempo para el medio juego.

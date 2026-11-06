@@ -19,7 +19,8 @@ se publicó primero como 1.0, y sus archivos conservan ese nombre.
 ## Resultados
 
 Medido en un AMD Ryzen 5 5600 (6 núcleos, 12 hilos). Las cifras de Elo llevan su margen de
-error del 95 %.
+error del 95 %. Las de fuerza son de la 0.9.0: la 0.9.1 usa la misma red y la misma búsqueda, y con
+incremento reparte el reloj igual.
 
 ### Fuerza absoluta
 
@@ -58,6 +59,7 @@ otros rivales.
 
 | Partidas con 5 s por bando y 0,05 s de incremento | Partidas | Resultado |
 |---|---|---|
+| Ayano 0.9.1 contra 0.9.0 | 200 | −12 ± 28 Elo, sin diferencia apreciable |
 | Ayano 0.9.0 contra 0.8.0 | 1000 | **+113 ± 17 Elo** |
 | Red gen3 contra la evaluación clásica, con sus tablas anteriores | 160 | **+364 ± 71 Elo** |
 | Red gen3 contra la red gen2 | 1000 | **+39 ± 16 Elo** |
@@ -73,6 +75,22 @@ Las tres últimas filas son anteriores a gen4.
 | Profundidad completada desde la posición inicial | 26 en 5 segundos |
 | Bratko-Kopec, 2 s y 2 hilos | 19 y 20 de 24, en dos pasadas |
 | Perft | Exacto en toda la suite, unos 800 millones de nodos |
+
+### Prueba en Cute Chess
+
+La 0.9.1 nace de probar la 0.9.0 en Cute Chess 1.5.1, el primer gestor externo que usó. No jugó
+ninguna jugada ilegal ni se colgó, pero aparecieron fallos que las pruebas anteriores no veían:
+
+| Prueba | 0.9.0 | 0.9.1 |
+|---|---|---|
+| Reloj agotado a 5 s por bando, sin incremento | 10 de 48 partidas | 0 de 48 |
+| Reloj agotado a 2 s por bando, sin incremento | 9 de 32 | 0 de 32 |
+| Avisos de jugadas ilegales en las líneas de análisis | 202 en 338 partidas | 0 en 726 |
+
+La 0.9.1 tampoco agotó el reloj con incremento ni con control de jugadas, con las opciones por
+defecto. Sí le pasó 1 vez en 48 con `MultiPV` 3 a 3 s + 0,03, un caso extremo que sigue sin
+resolver. El detalle está en
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#prueba-en-cute-chess).
 
 ## Descargar
 
@@ -124,6 +142,8 @@ con g++ 15 en WSL. Las herramientas solo se compilan con CMake, y `match` solo f
 2. Añade `ayano.exe` como motor UCI.
 3. Elige su fuerza con la opción **Skill Level**: 20 es el máximo y 0 el más flojo.
 
+Se ha probado en Cute Chess 1.5.1, pero aún no en Arena ni en otras interfaces. No admite Chess960.
+
 ## Opciones UCI
 
 | Opción | Por defecto | Descripción |
@@ -132,7 +152,7 @@ con g++ 15 en WSL. Las herramientas solo se compilan con CMake, y `match` solo f
 | `Threads` | 1 | Hilos de búsqueda |
 | `MultiPV` | 1 | Número de líneas que analiza |
 | `Skill Level` | 20 | Fuerza de juego, de 0 a 20 |
-| `Move Overhead` | 10 | Margen por jugada en ms, para compensar retrasos de la interfaz |
+| `Move Overhead` | 10 | Margen por jugada en ms, para compensar retrasos de la interfaz; sin incremento, también fija cuánto reloj se guarda para el final |
 | `Use NNUE` | true | Usa la red neuronal; si no, la evaluación clásica |
 | `EvalFile` | | Carga una red desde un archivo |
 | `Clear Hash` | | Vacía la tabla de transposición |
@@ -307,6 +327,13 @@ per engine, on an AMD Ryzen 5 5600. Ayano 0.9.0 scored about 3080 ± 35 on the `
 million nodes per move, up from about 3015 ± 35 for version 0.8.0. At 120 s + 1 s, from only 80
 games, 0.9.0 scored about 3275, between 3215 and 3345, and 0.8.0 between 3155 and 3320. Figures
 above 3190, the top of the scale, are extrapolations. These are not CCRL ratings.
+
+Version 0.9.1 uses the same network and search as 0.9.0. Testing in Cute Chess 1.5.1 showed that
+0.9.0 ran out of time in 10 of 48 games at 5 s per side without increment, and sent illegal moves in
+some analysis lines. Version 0.9.1 fixes both: it ran out of time in 0 of 48 games, and no illegal
+lines appeared in 726 games. At 5 s + 0.05 there is no measurable difference in strength: −12 ± 28
+Elo over 200 games. It has been tested in Cute Chess, but not yet in Arena or other interfaces, and
+it does not support Chess960.
 
 Windows and Linux binaries are on the
 [latest release](https://github.com/CloseNoJona/ayano/releases/latest). Pick `bmi2` for most CPUs,

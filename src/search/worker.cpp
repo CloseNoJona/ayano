@@ -16,6 +16,7 @@ namespace ayano {
 namespace {
 
 constexpr std::int64_t kReportEveryMs = 3000;
+constexpr std::int64_t kQuietBelowMs = 100;
 
 template <typename Array>
 void fill_zero(Array& array) {
@@ -119,6 +120,11 @@ void Worker::iterate_depth() {
   const SearchLimits& limits = shared_.limits;
   const std::size_t multi_pv =
       std::min(std::size_t(shared_.effective_multi_pv()), root_moves_.size());
+  // Con muy poco tiempo la interfaz tarda mas en leer las lineas que el motor en escribirlas,
+  // y ese retraso se descuenta del reloj: solo se informa del resultado final.
+  const bool quiet =
+      !limits.ponder && shared_.time.has_limit() && shared_.time.maximum_ms() < kQuietBelowMs;
+  bool unreported = false;
 
   for (root_depth_ = 1; root_depth_ < MAX_PLY && !stopped(); ++root_depth_) {
     if (limits.depth > 0 && root_depth_ > limits.depth) break;
@@ -136,16 +142,19 @@ void Worker::iterate_depth() {
 
     if (stopped()) {
       if (is_main()) report_pv(root_depth_);
+      unreported = false;
       break;
     }
 
     completed_depth_ = root_depth_;
     if (is_main()) {
-      report_pv(root_depth_);
+      unreported = quiet;
+      if (!quiet) report_pv(root_depth_);
       decide_stop_after_iteration();
     }
     if (limits.mate > 0 && root_moves_[0].score >= mate_in(2 * limits.mate)) break;
   }
+  if (unreported) report_pv(completed_depth_);
 }
 
 void Worker::aspiration_window() {
