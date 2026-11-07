@@ -12,9 +12,9 @@
   repite el match con mas partidas (-MatchGames).
 
 .EXAMPLE
-  .\scripts\new_generation.ps1 -Name gen4 -Minutes 60
+  .\scripts\new_generation.ps1 -Name gen5 -Minutes 60
 
-  Guarda data\gen4.bin y nets\gen4-*.nnue. Si la red nueva gana el match, copiala a
+  Guarda data\gen5.bin y nets\gen5-*.nnue. Si la red nueva gana el match, copiala a
   nets\default.nnue y recompila para integrarla en el ejecutable.
 #>
 param(

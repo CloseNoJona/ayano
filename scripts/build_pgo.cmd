@@ -4,7 +4,7 @@ rem los caminos que mas se usan. Resultado: build\pgo\ayano.exe
 setlocal
 set "ROOT=%~dp0.."
 set "BUILD=%ROOT%\build\pgo"
-call "%~dp0vs.cmd" cmake -S "%ROOT%" -B "%BUILD%" -G Ninja -DCMAKE_BUILD_TYPE=Release -DAYANO_NATIVE=ON -DAYANO_PGO=GENERATE
+call "%~dp0vs.cmd" cmake -S "%ROOT%" -B "%BUILD%" -G Ninja -DCMAKE_BUILD_TYPE=Release -DAYANO_NATIVE=ON -DAYANO_HIDDEN=1024 -DAYANO_PGO=GENERATE
 if errorlevel 1 exit /b 1
 call "%~dp0vs.cmd" cmake --build "%BUILD%" --target ayano
 if errorlevel 1 exit /b 1

@@ -46,6 +46,8 @@ TEST(acumulador_incremental_coincide_con_recalculo) {
       "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
       "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
       "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+      // Con reyes solos y libres, casi cada jugada cambia su cubeta o su flanco.
+      "8/8/3k4/8/8/4K3/8/8 w - - 0 1",
   };
 
   std::mt19937 rng(99);
@@ -82,6 +84,21 @@ TEST(acumulador_incremental_coincide_con_recalculo) {
   }
 }
 
+// La cache guarda sumas de una red concreta: tras cambiar de red no debe reutilizarlas.
+TEST(cache_de_acumuladores_no_sobrevive_a_otra_red) {
+  const auto first = random_network(31);
+  const auto second = random_network(32);
+  auto stack = std::make_unique<AccumulatorStack>();
+  std::vector<Frame> frames(1);
+  frames[0] = {Position::startpos(), Move::none()};
+  const auto get_entry = [&frames](int ply) -> const Frame& { return frames[std::size_t(ply)]; };
+
+  stack->reset();
+  (void)stack->evaluate(*first, 0, get_entry);
+  stack->reset();
+  CHECK_EQ(stack->evaluate(*second, 0, get_entry), evaluate_from_scratch(*second, frames[0].pos));
+}
+
 TEST(jugada_nula_conserva_el_acumulador) {
   const auto network = random_network(11);
   auto stack = std::make_unique<AccumulatorStack>();
@@ -106,6 +123,18 @@ TEST(la_red_es_simetrica_al_invertir_colores) {
   CHECK_EQ(evaluate_from_scratch(*network, *white), evaluate_from_scratch(*network, *black));
 }
 
+// Con toda la capa saturada y los pesos en su limite, la suma no cabe en 32 bits. El archivo
+// de red admite estos pesos, asi que la evaluacion debe seguir siendo exacta.
+TEST(salida_de_la_red_no_desborda_con_pesos_extremos) {
+  auto network = std::make_unique<Network>();
+  network->eval_scale = 1;
+  network->feature_bias.fill(std::int16_t(kQuantActivation));
+  for (const std::int16_t weight : {std::int16_t(128), std::int16_t(-128)}) {
+    network->output_weights.fill(weight);
+    CHECK_EQ(evaluate_from_scratch(*network, Position::startpos()), Value(kHidden * weight / 32));
+  }
+}
+
 TEST(indice_de_entrada_refleja_cuando_el_rey_cruza) {
   CHECK(!is_mirrored(D1));
   CHECK(is_mirrored(E1));
@@ -113,6 +142,37 @@ TEST(indice_de_entrada_refleja_cuando_el_rey_cruza) {
   CHECK_EQ(feature_index(WHITE, E1, W_ROOK, A1), feature_index(WHITE, D1, W_ROOK, H1));
   // Mismo tipo de pieza propia desde la perspectiva negra, con el tablero invertido.
   CHECK_EQ(feature_index(WHITE, A1, W_PAWN, E2), feature_index(BLACK, A8, B_PAWN, E7));
+}
+
+// Debe coincidir con la disposicion del entrenador: si no, la red evaluaria otra posicion.
+TEST(cubeta_de_rey_depende_de_su_casilla_relativa) {
+  CHECK_EQ(king_bucket(WHITE, A1), 0);
+  CHECK_EQ(king_bucket(WHITE, D1), 3);
+  CHECK_EQ(king_bucket(WHITE, A2), 4);
+  CHECK_EQ(king_bucket(WHITE, D2), 5);
+  CHECK_EQ(king_bucket(WHITE, A3), 6);
+  CHECK_EQ(king_bucket(WHITE, D4), 6);
+  CHECK_EQ(king_bucket(WHITE, A5), 7);
+  CHECK_EQ(king_bucket(WHITE, D8), 7);
+}
+
+TEST(cubeta_de_rey_es_simetrica) {
+  for (int rank = 0; rank < 8; ++rank) {
+    for (int file = 0; file < 8; ++file) {
+      const Square s = make_square(file, rank);
+      const int bucket = king_bucket(WHITE, s);
+      CHECK(bucket >= 0 && bucket < kKingBuckets);
+      CHECK_EQ(bucket, king_bucket(WHITE, make_square(7 - file, rank)));
+      CHECK_EQ(bucket, king_bucket(BLACK, make_square(file, 7 - rank)));
+    }
+  }
+}
+
+TEST(indice_de_entrada_depende_de_la_cubeta_del_rey) {
+  const int base = feature_index(WHITE, A1, W_PAWN, E2);
+  CHECK_EQ(feature_index(WHITE, D1, W_PAWN, E2), base + 3 * kPieceSquareInputs);
+  CHECK_EQ(feature_index(WHITE, D8, W_PAWN, E2), base + 7 * kPieceSquareInputs);
+  CHECK(feature_index(WHITE, D8, B_KING, H8) < kFeatures);
 }
 
 TEST(cubetas_de_salida_cubren_todo_el_material) {

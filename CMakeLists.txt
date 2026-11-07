@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(ayano VERSION 0.9.1 LANGUAGES CXX)
+project(ayano VERSION 0.10.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,7 +13,7 @@ option(AYANO_NATIVE "Usar AVX2 + BMI2/PEXT (CPUs modernas)" ON)
 option(AYANO_PEXT "Usar PEXT para las piezas deslizantes (lento en AMD Zen 1 y 2)" ON)
 option(AYANO_TUNE "Exponer los parametros de busqueda como opciones UCI" OFF)
 set(AYANO_PGO "OFF" CACHE STRING "Optimizacion guiada por perfil: OFF, GENERATE o USE")
-set(AYANO_HIDDEN 512 CACHE STRING "Neuronas de la capa oculta; la red integrada exige 512")
+set(AYANO_HIDDEN 1024 CACHE STRING "Neuronas de la capa oculta; la red integrada exige 1024")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
@@ -64,16 +64,19 @@ target_link_libraries(ayano_lib PUBLIC ayano_flags Threads::Threads)
 # --- Red NNUE integrada en el ejecutable. Con otro tamano de capa no encajaria, asi que
 # esa compilacion no integra ninguna y la red se carga con EvalFile.
 set(AYANO_NET ${CMAKE_CURRENT_SOURCE_DIR}/nets/default.nnue)
-if(EXISTS ${AYANO_NET} AND AYANO_HIDDEN EQUAL 512)
+if(EXISTS ${AYANO_NET} AND AYANO_HIDDEN EQUAL 1024)
+  add_executable(embed_net tools/embed_net.cpp)
   set(AYANO_NET_CPP ${CMAKE_CURRENT_BINARY_DIR}/embedded_net.cpp)
   add_custom_command(
     OUTPUT ${AYANO_NET_CPP}
-    COMMAND ${CMAKE_COMMAND} -DINPUT=${AYANO_NET} -DOUTPUT=${AYANO_NET_CPP}
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake
-    DEPENDS ${AYANO_NET} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake
+    COMMAND embed_net ${AYANO_NET} ${AYANO_NET_CPP}
+    DEPENDS embed_net ${AYANO_NET}
     COMMENT "Integrando la red NNUE")
   target_sources(ayano_lib PRIVATE ${AYANO_NET_CPP})
   target_compile_definitions(ayano_lib PRIVATE AYANO_HAS_EMBEDDED_NET)
+else()
+  message(WARNING "Sin red integrada: el motor usara la evaluacion clasica salvo que se "
+                  "cargue una con EvalFile (AYANO_HIDDEN=${AYANO_HIDDEN}).")
 endif()
 
 # --- Motor UCI
@@ -95,6 +98,7 @@ add_test(NAME unit COMMAND ayano_tests)
 
 # --- Herramientas (partidas, generacion de datos, entrenamiento)
 file(GLOB AYANO_TOOLS CONFIGURE_DEPENDS tools/*.cpp)
+list(REMOVE_ITEM AYANO_TOOLS ${CMAKE_CURRENT_SOURCE_DIR}/tools/embed_net.cpp)
 foreach(tool_src ${AYANO_TOOLS})
   get_filename_component(tool_name ${tool_src} NAME_WE)
   add_executable(${tool_name} ${tool_src})

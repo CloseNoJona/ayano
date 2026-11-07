@@ -26,7 +26,7 @@ else
 endif
 
 ALL_FLAGS := -std=c++20 -O3 -DNDEBUG -Wall -Wextra -Isrc -Itests -pthread $(ARCH_FLAGS) \
-             -DAYANO_HIDDEN=512 -DAYANO_HAS_EMBEDDED_NET $(CXXFLAGS)
+             -DAYANO_HIDDEN=1024 -DAYANO_HAS_EMBEDDED_NET $(CXXFLAGS)
 LINK_FLAGS := -pthread $(if $(STATIC),-static) $(LDFLAGS)
 
 ENGINE_SOURCES := $(filter-out src/main.cpp,$(wildcard src/*.cpp src/*/*.cpp))
@@ -50,15 +50,12 @@ $(BUILD)/%.o: %.cpp
 $(BUILD)/embedded_net.o: $(BUILD)/embedded_net.cpp
 	$(CXX) $(ALL_FLAGS) -MMD -MP -c $< -o $@
 
-# Los mismos bytes que integra cmake/embed.cmake, generados con herramientas POSIX.
-$(BUILD)/embedded_net.cpp: $(EVALFILE)
+$(BUILD)/embed_net: tools/embed_net.cpp
 	@mkdir -p $(dir $@)
-	{ printf '#include "nnue/network.h"\n\nnamespace ayano::nnue {\n\nnamespace {\n'; \
-	  printf 'constexpr std::uint8_t kEmbeddedNetwork[] = {\n'; \
-	  od -An -v -tx1 $< | sed -E 's/ ([0-9a-f]{2})/0x\1,/g'; \
-	  printf '};\n}  // namespace\n\n'; \
-	  printf 'std::span<const std::uint8_t> embedded_network() { return kEmbeddedNetwork; }\n'; \
-	  printf '\n}  // namespace ayano::nnue\n'; } > $@
+	$(CXX) -std=c++20 -O1 $< -o $@
+
+$(BUILD)/embedded_net.cpp: $(EVALFILE) $(BUILD)/embed_net
+	$(BUILD)/embed_net $(EVALFILE) $@
 
 clean:
 	rm -rf build/linux-* $(EXE)

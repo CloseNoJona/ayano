@@ -16,7 +16,7 @@ namespace ayano {
 
 namespace {
 
-constexpr const char* kEngineName = "Ayano 0.9.1";
+constexpr const char* kEngineName = "Ayano 0.10.0";
 constexpr const char* kEngineAuthor = "Jonathan Garcia y Claude";
 constexpr int kMaxHashMb = 65536;
 constexpr int kMaxThreads = 256;
@@ -270,6 +270,7 @@ void Uci::apply_option(const std::string& name, const std::string& value) {
     if (value.empty() || value == "<empty>") return;
     std::string error;
     if (nnue::load_network_file(value, &error)) {
+      engine_.new_game();  // la tabla hash y las correcciones son de la red anterior
       send("info string red cargada: " + value);
     } else {
       send_error(error);

@@ -14,11 +14,13 @@ evaluación con una red NNUE. Las técnicas están descritas públicamente, sobr
 | `src/board` | Posición inmutable, FEN, generación de jugadas, SEE, perft |
 | `src/eval` | Evaluación clásica, usada como respaldo y para arrancar el entrenamiento |
 | `src/nnue` | Red neuronal: inferencia AVX2, acumuladores, formato de datos |
-| `src/train` | Entrenador de la red en CPU |
+| `src/train` | Entrenador de la red en CPU, usado hasta gen4 |
 | `src/search` | Búsqueda, hilos, tabla de transposición, historiales, tiempo |
 | `src/uci` | Protocolo UCI y benchmark |
-| `tools` | `datagen`, `train`, `match`, `solve`, `netcheck`, `tune_pst` |
-| `scripts` | Compilación, ciclo de entrenamiento, ajuste de parámetros, comparación de código |
+| `tools` | `datagen`, `train`, `match`, `solve`, `netcheck`, `tune_pst`, `embed_net` |
+| `scripts` | Compilación, ciclo de autojuego, ajuste de parámetros, comparación de código |
+| `training` | Receta de la red actual: entrenador para bullet, conversión y calibración |
+| `nets` | La red que se integra en el ejecutable |
 | `tests` | Tests unitarios y de propiedades |
 
 ## Decisiones de diseño
@@ -59,7 +61,7 @@ hilo: se midió un exceso de 16 ms sobre el límite, casi un tic del temporizado
 (15,6 ms), con solo 86 ms en el reloj. Por eso el límite duro deja siempre un 30 % del reloj y
 un margen fijo. Perder una partida por tiempo cuesta mucho más que pensar un poco menos.
 
-| Margen mínimo de reloj en cada control | Antes | Ahora |
+| Margen mínimo de reloj en cada control | Antes | Después |
 |---|---|---|
 | 1 s + 0,01 | 13 ms | 29 ms |
 | 5 s + 0,05 | 10 ms | 47 ms |
@@ -121,14 +123,16 @@ después, en matches aparte con otras aperturas. La red es gen3 en los dos bando
 Los mayores cambios podan más las jugadas tranquilas (`kFutilityBase` baja de 95 a 73), menos las
 capturas (`kCaptureFutilityPerDepth` sube de 190 a 232) y castigan más en los historiales a las
 jugadas que no cortaron (`kHistoryMalusScale` sube de 200 a 252). Ninguno llegó a sus límites.
-El ajuste se hizo antes de tener gen4 y no se ha repetido con esa red.
+El ajuste se hizo antes de tener gen4 y no se ha repetido con esa red ni con la actual. Los márgenes
+de poda siguen siendo los de entonces, y por eso cada red nueva se calibra para que sus evaluaciones
+midan parecido: ver [Red NNUE](#red-nnue).
 
 ## Red NNUE
 
 ```
-768 entradas por perspectiva (pieza x casilla, reflejadas)
-   -> capa oculta de 512 neuronas con SCReLU, una por cada perspectiva
-   -> 1024 valores -> 1 salida, elegida entre 8 cubetas según las piezas que quedan
+768 entradas por perspectiva (pieza x casilla, reflejadas), en 8 cubetas según el rey propio
+   -> capa oculta de 1024 neuronas con SCReLU, una por cada perspectiva
+   -> 2048 valores -> 1 salida, elegida entre 8 cubetas según las piezas que quedan
 ```
 
 * **Dos perspectivas:** la red ve el tablero desde cada bando, siempre con el bando propio
@@ -136,15 +140,65 @@ El ajuste se hizo antes de tener gen4 y no se ha repetido con esa red.
 * **Reflejo horizontal:** si el rey de una perspectiva está en las columnas e-h, su tablero
   se refleja. La red solo aprende posiciones con el rey en el flanco de dama, y necesita
   menos datos para generalizar.
-* **Actualización incremental:** una jugada cambia dos o tres entradas, así que la capa
+* **Cubetas de rey:** cada perspectiva usa otros pesos según dónde esté su rey. Son ocho, y
+  distinguen más donde el rey pasa la mayor parte de la partida: una por cada casilla de la primera
+  fila, dos en la segunda, una para las filas tercera y cuarta, y otra para el resto. Al entrenar,
+  un conjunto de pesos común a todas reparte lo que no depende del rey; al guardar la red se suma
+  a cada cubeta, así que el motor no lo ve.
+* **Actualización incremental:** una jugada cambia de dos a cuatro entradas, así que la capa
   oculta se actualiza con sumas y restas de filas. El cálculo es perezoso: solo se hace para
   nodos que se evalúan de verdad, partiendo del antepasado más cercano ya calculado.
+* **Caché de recálculo:** si el rey cambia de cubeta o de flanco, cambian todas las entradas de esa
+  perspectiva. Cada hilo guarda la última suma vista para cada perspectiva, cubeta y flanco, con sus
+  piezas, y solo corrige las que difieren.
 * **Cuantización:** enteros de 16 bits con escalas 255 y 64. El producto `x * w` cabe en 16
-  bits, lo que permite calcular `x² * w` con `_mm256_madd_epi16`.
-* **Escala propia:** cada archivo de red guarda los centipeones por unidad de salida, así que
-  una red no puede usarse con una escala distinta de la que se entrenó.
+  bits, lo que permite calcular `x² * w` con `_mm256_madd_epi16`. La suma final se hace en 64 bits,
+  porque con pesos extremos, que el formato admite, no cabe en 32.
+* **Escala propia:** cada archivo de red guarda los centipeones por unidad de salida. Los márgenes
+  de poda de la búsqueda se ajustaron con gen3, así que cada red nueva se calibra para que sus
+  evaluaciones midan parecido. La actual usa 155: en 693 posiciones, la pendiente da 145, la
+  desviación da 163 y la correlación con gen4 es de 0,915. No se ha medido con partidas si otro
+  valor rinde más.
+
+Al cargar otra red con `EvalFile` se vacían la tabla hash y las correcciones, porque lo aprendido con
+una red no vale para otra.
 
 ## Cómo se entrena la red
+
+La red actual se entrena en GPU con datos de Leela Chess Zero. Hasta la 0.9.1, las redes, de gen0 a
+gen4, aprendieron solo de partidas propias. Se pasó a datos externos porque 10 partidas en Lichess,
+analizadas con Stockfish, apuntaron a que el límite era el criterio de la evaluación, y este equipo
+genera unos 115 millones de posiciones al día, muy lejos de los 3000 millones de esos datos.
+
+### Red actual, con datos de Leela
+
+La receta completa está en [training/README.md](../training/README.md).
+
+- **Datos:** el ciclo T91 de Leela Chess Zero, de enero a mayo de 2026. xu-shawn lo empaquetó en
+  formato binpack, y Adam Twiss lo minimizó y lo filtró con el fork de Stockfish de linrock, en
+  [`adamtwiss/t91-binpacks-filtered`](https://huggingface.co/datasets/adamtwiss/t91-binpacks-filtered):
+  4440 millones de posiciones, 3080 millones de ellas entrenables. Su autor avisa de que en sus
+  pruebas daban redes unos 100 Elo más flojas que los datos de T80 en igual cantidad, de que el
+  filtrado las empeoraba unos 20 Elo y de que no los recomienda en lugar de datos contrastados. Nada
+  de eso se ha comprobado aquí.
+- **Entrenador:** [bullet](https://github.com/jw1912/bullet), en una NVIDIA RTX 3060 de 12 GB. Los
+  320 superlotes tardaron 6 h 40 min, a unos 1,3 millones de posiciones por segundo.
+- **Objetivo:** mezcla de la evaluación de los datos y del resultado de la partida, con un peso del
+  resultado que sube de 0,2 a 0,4. Con estos datos no se ha probado otra mezcla.
+
+| Red | Datos | Superlotes | Contra la 0.9.1, a 5 s + 0,05 |
+|---|---|---|---|
+| a1 | Tres meses | 40 | +102 =69 −29: +133 ± 40 |
+| b1, la actual | Los cinco meses | 320 | +116 =67 −17: +189 ± 42 |
+
+En duelo directo a 5 s + 0,05, b1 gana a a1 por +60 =116 −24, +63 ± 31 Elo, en dos tandas de 120 y
+80 partidas por un corte de luz. Ninguna de las dos se compiló con PGO para estos duelos.
+
+En las primeras generaciones, con muchas menos posiciones, 1024 neuronas no ganaban a 512. Ahora, el
+conjunto de arquitectura y datos gana a la 0.9.1 pese a analizar un 16 % menos de nodos por segundo.
+Arquitectura y datos no se midieron por separado.
+
+### Generaciones anteriores, con partidas propias
 
 ```
 evaluación clásica -> partidas contra sí mismo -> red 1 -> más partidas -> red 2 -> ...
@@ -153,13 +207,13 @@ evaluación clásica -> partidas contra sí mismo -> red 1 -> más partidas -> r
 1. `datagen` juega partidas desde aperturas aleatorias con un límite de nodos y guarda las
    posiciones tranquilas junto con la evaluación de la búsqueda y el resultado final.
 2. `train` ajusta la red para predecir `sigmoide(evaluación / K)`. Usa Adam y varios hilos:
-   la entrada dispersa hace que la CPU baste para esta arquitectura.
+   la entrada dispersa hace que la CPU baste para la arquitectura de entonces, con 768 entradas y
+   512 neuronas.
 3. `match` comprueba con partidas que la red nueva es más fuerte que la anterior.
 
-Cada generación juega mejor que la anterior, por lo que produce datos mejores. Ninguna red
-ni dato procede de otro motor.
-
-### Progreso por generación
+Cada generación juega mejor que la anterior, por lo que produce datos mejores. Estas redes siguen
+en la etiqueta [v0.9.1](https://github.com/CloseNoJona/ayano/tree/v0.9.1/nets), porque el motor
+actual ya no las carga.
 
 | Red | Posiciones nuevas | Total de posiciones | Contra la anterior, a 10 000 nodos | Contra la anterior, a 5 s + 0,05 |
 |---|---|---|---|---|
@@ -175,19 +229,21 @@ profunda es la búsqueda, así que las pruebas rápidas la infravaloran.
 gen3 mejora menos que gen2. También aportó menos posiciones nuevas, pero no se ha medido cuánto
 pesó eso. A 10 000 nodos su ventaja apenas supera el margen de error; fueron las 1000 partidas
 con reloj las que la confirmaron. Contra Stockfish esa ventaja no se aprecia: ver
-[Fuerza absoluta](#fuerza-absoluta).
+[Fuerza contra Stockfish limitado](#fuerza-contra-stockfish-limitado).
 
 gen4 da un salto mucho mayor: con la misma búsqueda en los dos bandos gana a gen3 por +85 ± 19 a
 10 000 nodos y por +87 ± 17 a 100 000. Es la generación que más posiciones aportó, lo que apunta a
 que los datos eran el freno, aunque no se ha aislado: también aprendió de partidas de una red mejor.
 Con reloj solo se midió el conjunto: gen4 con la búsqueda ajustada gana a gen3 con la búsqueda
 anterior por +113 ± 17 a 5 s + 0,05, con +456 =401 −143 en 1000 partidas. A diferencia de lo que
-pasó con gen3, esta mejora también se ve contra Stockfish: ver [Fuerza absoluta](#fuerza-absoluta).
+pasó con gen3, esta mejora también se ve contra Stockfish: ver
+[Fuerza contra Stockfish limitado](#fuerza-contra-stockfish-limitado).
 
-### Qué se midió al entrenar
+### Qué se midió al entrenar con partidas propias
 
 Cada decisión se tomó jugando partidas, no mirando la pérdida del entrenamiento. Las cifras
-son de partidas a igual número de nodos, con margen de error del 95 %, salvo que se indique.
+son de partidas a igual número de nodos, con margen de error del 95 %, salvo que se indique. Valen
+para aquellas redes y aquellos datos: no se han repetido con la red actual.
 
 | Pregunta | Resultado | Decisión |
 |---|---|---|
@@ -235,15 +291,17 @@ Predicen algo mejor y juegan igual. La huella `bench` no cambia, porque la búsq
 | Acumulador incremental contra recálculo | La red evalúa igual por cualquier camino |
 | Gradiente contra diferencias finitas | La retropropagación es correcta |
 | Red cuantizada contra red flotante | La cuantización no altera la fórmula |
+| `training/convert_net.py` contra el motor | Una evaluación aparte, con las reglas del entrenador, da lo mismo que el motor |
 | Compilación con AddressSanitizer | No hay accesos inválidos a memoria |
 | Compilación con `AYANO_VERIFY_NNUE` | La red no se desincroniza durante una búsqueda real |
 | Compilación portable | El camino sin AVX2 ni PEXT también es correcto |
 | `bench` | Huella que detecta cambios involuntarios en la búsqueda |
 | `bench` en cada variante | Release, portable, AVX2 sin PEXT y PGO recorren los mismos nodos |
 | Compilación con g++ en Linux | Sus tres variantes pasan los tests y recorren los mismos nodos que con MSVC |
-| `scripts/similarity.py` contra 15 motores | Solo coinciden fragmentos de pocas líneas, un 0,5 % de los tokens |
+| `scripts/similarity.py` contra 15 motores | Solo coinciden fragmentos de pocas líneas, un 0,7 % de los tokens |
 | `match` con SPRT | Cada mejora se confirma jugando, no por intuición |
-| `match` contra Stockfish limitado | Sitúa al motor en una escala externa |
+| `match` contra motores de la lista CCRL Blitz | Sitúa al motor en una escala externa |
+| `match` contra Stockfish limitado | Compara las versiones hasta la 0.9.0 con una regla fija |
 | Cute Chess contra Stockfish limitado | El protocolo, el reloj y las PV funcionan en un gestor externo |
 
 ### Prueba en Cute Chess
@@ -286,12 +344,63 @@ tablas tras 185 jugadas. Sin interfaz, el motor responde en 1,4 ms con 15 ms en 
 retraso parece venir de fuera; no se ha aislado. La interfaz gráfica solo se probó con la 0.9.0, y
 Arena y otras interfaces siguen sin probarse.
 
-### Fuerza absoluta
+La 0.10.0 cambia la red y la actualización de los acumuladores, así que se repitió la batería, sin
+la interfaz gráfica: 370 partidas con incremento, sin él, con control de jugadas, por tiempo fijo,
+profundidad y nodos, desde posiciones FEN, con cuatro hilos, meditando en el turno rival y con las
+tres variantes de Windows. No hubo jugadas ilegales, cuelgues ni avisos de PV ilegal, y no agotó el
+reloj en ninguna. En las 136 sin incremento, a 1, 2, 5 y 30 s por bando, Stockfish lo agotó 4 veces.
+Con `MultiPV` 3 a 3 s + 0,03 jugó 38 partidas sin agotarlo, pero ese caso no se ha corregido y
+puede repetirse.
 
-Stockfish 19 limitado hace de regla: su documentación calibra `UCI_Elo` a 120 s + 1 s y la ancla
-a CCRL 40/4. Las redes jugaron contra varios niveles, con aperturas al azar de 8 medias jugadas y
-un millón de nodos por jugada para cada motor. Limitar por nodos hace que el resultado no dependa
-de la carga de la máquina.
+### Fuerza en la escala CCRL Blitz
+
+Desde la 0.10.0, la regla es la lista [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) del 31 de
+octubre de 2026. Los motores jugaron a 120 s + 1 s, con un hilo y 64 MB de hash, desde aperturas al
+azar de 8 medias jugadas. `match` da la partida por ganada con 900 cp durante 8 medias jugadas, y por
+tablas con menos de 6 cp durante 12, desde la media jugada 80.
+
+| Versión | Rival | Rating del rival | Partidas | Resultado | Diferencia | Rating que implica |
+|---|---|---|---|---|---|---|
+| 0.10.0 | Clover 9.1 | 3726 | 100 | +13 =56 −31 | −63 ± 45 | 3663 |
+| 0.10.0 | Motor 0.9.0 | 3694 | 100 | +14 =61 −25 | −38 ± 43 | 3656 |
+| 0.9.1 | Carp 3.0.1 | 3525 | 100 | +22 =45 −33 | −38 ± 51 | 3487 |
+| 0.9.1 | Frozenight 6.0.0 | 3361 | 100 | +52 =42 −6 | +173 ± 53 | 3534 |
+| 0.9.1 | Mantissa 3.7.2 | 3311 | 100 | +57 =33 −10 | +177 ± 60 | 3488 |
+
+Un ajuste por máxima verosimilitud, con las tablas como medio punto, busca el rating que mejor
+explica los resultados de cada versión. El intervalo del 95 % sale de remuestrear las partidas:
+
+| Versión | Rating estimado | Intervalo del 95 % | Chi cuadrado |
+|---|---|---|---|
+| 0.10.0 | **3659** | De 3627 a 3689 | 0,05 con 1 grado de libertad |
+| 0.9.1 | **3502** | De 3473 a 3535 | 2,09 con 2 grados de libertad |
+
+Un solo rating explica bien los rivales de cada versión. La diferencia, de unos +157, concuerda con
+el duelo directo a 5 s + 0,05: +116 =67 −17, +189 ± 42 Elo en 200 partidas.
+
+Las partidas no se jugaron todas en las mismas condiciones:
+
+- **La 0.9.1** jugó a dos partidas a la vez, casi siempre mientras se entrenaba la red b1 y se jugaba
+  otra tanda de dos partidas. Solo las 40 últimas contra Carp se jugaron sin nada más, a cinco a la
+  vez.
+- **Las de Carp** son dos tandas, de 60 y 40 partidas, con aperturas distintas: un corte de luz
+  interrumpió la primera. Se conservaron las 60 ya registradas.
+- **La 0.10.0** jugó a cinco partidas a la vez, sin nada más, en los seis núcleos. Lo hizo con una
+  compilación anterior a tres correcciones que no alteran su juego: la huella `bench` es la misma.
+
+Ninguna partida se perdió por tiempo. El margen mínimo de reloj fue de 453 ms en las 440 partidas que
+lo registraron: las 60 interrumpidas por el corte no llegaron a guardarlo.
+
+La 0.9.0, con la misma red y la misma búsqueda que la 0.9.1, dio 3275 contra Stockfish limitado. Son
+escalas distintas: esa cifra está en `UCI_Elo` y estas en CCRL Blitz, así que los 227 puntos de
+diferencia no son fuerza. Cada escala solo sirve para comparar versiones medidas con ella.
+
+### Fuerza contra Stockfish limitado
+
+Hasta la 0.9.0, la regla fue Stockfish 19 limitado: su documentación calibra `UCI_Elo` a 120 s + 1 s
+y la ancla a CCRL 40/4. Las redes jugaron contra varios niveles, con aperturas al azar de 8 medias
+jugadas y un millón de nodos por jugada para cada motor. Limitar por nodos hace que el resultado no
+dependa de la carga de la máquina.
 
 | Rival | gen4 con la búsqueda ajustada | gen3 | gen2 |
 |---|---|---|---|
@@ -321,9 +430,9 @@ medir cada red nueva también contra un rival externo.
 Las tandas cortas engañan. La primera medida de gen2 dio 3068, con un 67,5 % en 40 partidas
 contra el nivel 3000. Al repetirla con 100 partidas, ese porcentaje bajó al 51,5 %.
 
-### Fuerza a 120 s + 1 s
+### Stockfish limitado a 120 s + 1 s
 
-Las dos versiones publicadas jugaron también con reloj, al ritmo de la calibración. Cada motor tuvo
+La 0.9.0 y la 0.8.0 jugaron también con reloj, al ritmo de la calibración. Cada motor tuvo
 un hilo y 64 MB de hash, las dos versiones jugaron las mismas aperturas y se jugaron cinco partidas
 a la vez en los seis núcleos. Ninguna partida se perdió por tiempo; el margen mínimo de reloj fue de
 246 ms en los dos casos. Un registro por minuto muestra que los motores dispusieron de sus cinco
@@ -359,10 +468,12 @@ muestras como independientes, así que es algo más ancho que el real.
 
 ### Límites de estas cifras
 
-Los intervalos solo recogen el azar de las partidas. Quedan dos incertidumbres mayores:
+Los intervalos solo recogen el azar de las partidas. Quedan incertidumbres mayores:
 
-- **La máquina.** La escala se calibró en otro equipo. Con reloj, un equipo más rápido da más
-  búsqueda a los dos motores, así que la cifra a 120 s + 1 s no tiene por qué repetirse en otro.
+- **La máquina.** Las dos escalas vienen de otros equipos. Con reloj, un equipo más rápido da más
+  búsqueda a los dos motores, así que estas cifras no tienen por qué repetirse en otro.
+- **Los rivales.** Un rating solo tiene sentido dentro de su grupo de motores, y aquí se usaron dos o
+  tres. La 0.10.0 solo jugó contra rivales más fuertes que ella. Por eso estas cifras no son un
+  rating de CCRL.
 - **El tipo de rival.** Stockfish limitado juega a propósito, con cierta probabilidad, una jugada
-  peor. Eso no equivale a enfrentarse a un motor de esa fuerza, así que la cifra no es un rating
-  de CCRL.
+  peor. Eso no equivale a enfrentarse a un motor de esa fuerza.

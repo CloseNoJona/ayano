@@ -1,13 +1,16 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <thread>
 
 #include "board/movegen.h"
 #include "board/position.h"
+#include "nnue/network.h"
 #include "search/timeman.h"
 #include "test_framework.h"
 #include "uci/uci.h"
@@ -265,6 +268,25 @@ TEST(uci_hash_pequeno_permite_buscar) {
   session.run("setoption name Hash value 8");
   session.run("position startpos");
   CHECK(contains(session.search("go depth 3"), "bestmove"));
+}
+
+// Lo aprendido con una red no vale para otra: si esta evalua todo a 0, cualquier otro valor
+// vendria de la tabla hash o de las correcciones de la anterior.
+TEST(uci_cargar_una_red_olvida_lo_aprendido) {
+  const std::string path = "test_red_uci.nnue";
+  const auto blank = std::make_unique<nnue::Network>();
+  blank->eval_scale = 400;
+  std::string error;
+  CHECK(nnue::save_network_file(*blank, path, &error));
+
+  UciSession session;
+  session.run("position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBN1 w Qkq - 0 1");
+  (void)session.search("go depth 8");
+  CHECK(contains(session.run("setoption name EvalFile value " + path), "red cargada"));
+  CHECK(contains(session.search("go depth 1"), "score cp 0 "));
+
+  std::remove(path.c_str());
+  CHECK(nnue::init(&error));  // los tests siguientes no deben quedarse con esta red
 }
 
 TEST(uci_comando_desconocido_no_rompe_nada) {
