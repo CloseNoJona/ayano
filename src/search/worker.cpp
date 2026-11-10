@@ -6,7 +6,10 @@
 #include <cstring>
 #include <iostream>
 
+#include "board/cuckoo.h"
 #include "board/movegen.h"
+#include "core/attacks.h"
+#include "core/zobrist.h"
 #include "eval/classical.h"
 #include "nnue/network.h"
 #include "search/params.h"
@@ -60,6 +63,7 @@ void Worker::new_game() {
   fill_zero(h.pawn_correction);
   fill_zero(h.minor_correction);
   fill_zero(h.non_pawn_correction);
+  fill_zero(h.continuation_correction);
   fill_zero(h.sentinel);
   for (auto& per_piece : h.counter_moves) per_piece.fill(Move::none());
 }
@@ -76,6 +80,8 @@ void Worker::prepare(const Position& root, std::span<const Key> game_keys) {
     e.killers = {Move::none(), Move::none()};
     e.static_eval = VALUE_NONE;
     e.cutoff_count = 0;
+    e.reduction = 0;
+    e.threats = 0;
     e.in_check = false;
     e.tt_pv = false;
   }
@@ -296,6 +302,44 @@ bool Worker::is_repetition(const Position& pos, int ply) const {
     if (++previous_occurrences >= 2) return true;
   }
   return false;
+}
+
+// Comprueba si el bando al que le toca puede volver con una jugada a una posicion ya vista.
+// Mira las posiciones en las que le tocaba al rival (impares hacia atras): si las jugadas del
+// rival desde entonces se anulan entre si (`others` == 0) y la diferencia de clave es la de
+// una sola jugada de pieza con el camino libre, esa jugada repite la posicion.
+bool Worker::has_upcoming_repetition(const Position& pos, int ply) const {
+  const int index = game_length_ + ply;
+  const int end = std::min(pos.rule50(), index);
+  if (end < 3) return false;
+
+  const auto key_at = [&](int back) { return key_history_[std::size_t(index - back)]; };
+  const Key key = pos.key();
+  Key others = key ^ key_at(1) ^ zobrist::side();
+  for (int back = 3; back <= end; back += 2) {
+    others ^= key_at(back - 1) ^ key_at(back) ^ zobrist::side();
+    if (others != 0) continue;
+    const Move m = cuckoo::find(key ^ key_at(back));
+    if (m == Move::none() || (attacks::between(m.from(), m.to()) & pos.pieces())) continue;
+    // La pieza que se moveria debe ser del bando al que le toca.
+    const Piece mover = pos.piece_on(pos.is_empty(m.from()) ? m.to() : m.from());
+    if (mover == NO_PIECE || color_of(mover) != pos.side_to_move()) continue;
+    if (back < ply) return true;  // dentro del arbol basta con volver una vez
+    // Antes de la raiz, como en is_repetition, la posicion debe haberse repetido ya.
+    for (int earlier = back + 4; earlier <= end; earlier += 2) {
+      if (key_at(earlier) == key_at(back)) return true;
+    }
+  }
+  return false;
+}
+
+// Si se puede repetir, el bando al que le toca tiene al menos tablas: alfa sube a ese valor.
+// Devuelve true si con eso ya se alcanza beta.
+bool Worker::claim_upcoming_draw(const Position& pos, int ply, Value& alpha, Value beta) const {
+  const Value draw = draw_value();
+  if (alpha >= draw || !has_upcoming_repetition(pos, ply)) return false;
+  alpha = draw;
+  return alpha >= beta;
 }
 
 bool Worker::is_draw(const Position& pos, int ply) const {

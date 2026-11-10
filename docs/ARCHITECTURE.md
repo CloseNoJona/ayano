@@ -87,29 +87,90 @@ Cute Chess, con `MultiPV` 3, la lectura iba unos 60 ms por detrás del motor.
 Cada nodo sigue el mismo camino, separado en funciones pequeñas en `src/search/search.cpp`:
 
 1. **Entrada** (`enter_node`): tablas por repetición, regla de 50 jugadas, material
-   insuficiente, poda por distancia al mate.
+   insuficiente, poda por distancia al mate. También reconoce una repetición que se puede
+   forzar con una sola jugada, antes de jugarla (`has_upcoming_repetition`).
 2. **Tabla hash** (`probe_tt`): corte directo si la entrada es lo bastante profunda.
 3. **Evaluación estática** (`compute_static_eval`): red o evaluación clásica, ajustada con
-   el historial de corrección.
+   el historial de corrección. Si el padre redujo este nodo y la evaluación dice que la reducción
+   fue excesiva o escasa, la profundidad se corrige en un ply (`adjust_depth_in_hindsight`).
 4. **Podas previas** (`forward_prune`, `probcut`): razoring, futilidad inversa, jugada nula
    con verificación, reducción interna y ProbCut.
 5. **Bucle de jugadas** (`move_loop`): poda por conteo, futilidad, SEE e historial;
    extensiones singulares, dobles, triples y negativas; reducciones tardías (LMR) con
    re-búsqueda; ventana nula (PVS).
 6. **Cierre** (`finish_node`): actualiza historiales, tabla hash e historial de corrección.
+   Fuera de la variante principal, un corte se acerca a beta antes de guardarse.
 
 La búsqueda de quietud (`qsearch`) resuelve las capturas pendientes para que la evaluación
 se aplique solo a posiciones tranquilas.
 
-Historiales: mariposa (origen-destino), capturas, continuación a 1, 2, 4 y 6 medias
-jugadas, estructura de peones, jugadas asesinas, respuesta a la jugada anterior y corrección
-de la evaluación por peones, piezas menores y resto de piezas.
+Historiales: mariposa (origen-destino) separada según si el origen y el destino están atacados,
+capturas, continuación a 1, 2, 4 y 6 medias jugadas, estructura de peones, jugadas asesinas,
+respuesta a la jugada anterior y corrección de la evaluación por peones, piezas menores, resto de
+piezas y las dos últimas jugadas.
+
+Cuando la corrección mueve mucho la evaluación, la búsqueda se fía menos de ella: la futilidad
+inversa pide más margen y las reducciones bajan.
+
+### Ideas de otros motores
+
+En la 0.11, un subagente leyó la búsqueda de Reckless, PlentyChess, Obsidian, Alexandria, Stormphrax,
+Viridithas, Caissa y Berserk, contó en otros seis cuántos usaban cada idea y las describió en
+palabras. El código se escribió desde esas descripciones, sin copiar el ajeno, y los números se
+ajustaron aquí. Cada tanda se midió a 40 000 nodos por jugada contra la búsqueda sin ella, con las
+anteriores aceptadas ya incluidas y un SPRT con hipótesis de 0 y 5 Elo:
+
+| Tanda | Ideas | Partidas | Elo | Decisión |
+|---|---|---|---|---|
+| 1 | Corrección por las dos últimas jugadas y profundidad corregida a posteriori | 6000 | +6,6 ± 6,6 | Aceptada |
+| 2 | Historial con un ply más tras un corte claro, cortes acercados a beta, evasiones en quietud y cautela con correcciones grandes | 8000 | +4,0 ± 5,8 | Aceptada |
+| A | Historial separado por casillas atacadas y repeticiones que se pueden forzar | 1657 | **+25,8 ± 12,4** | Aceptada |
+| B | Cinco retoques de la tabla hash, la jugada nula, la reducción interna, las extensiones y la aspiración | 1844 | −19,8 ± 12,1 | Rechazada |
+| C | Sustitución en la tabla hash y margen singular | 3560 | +2,3 ± 8,4 | Descartada |
+| Escala | Evaluación escalada por el material | 7492 | −2,7 ± 5,8 | Rechazada |
+
+Las tandas 1 y 2 no llegaron al umbral del SPRT, pero iban a favor y se aceptaron de forma
+provisional: la versión completa se midió después contra la 0.10.0. La C tampoco llegó y se descartó
+porque no demostraba nada y complicaba el código. La escala por material, que usan 10 de los 14,
+terminó el SPRT del lado del 0: aquí no mejora. Las tandas B y C y la escala se quitaron. Sumar los
+resultados exagera la mejora: medidas juntas, con los parámetros del nuevo ajuste y la red de la
+0.10.0 en ambos bandos, ganan a la 0.10.0 por +33,7 ± 9,4 Elo en 3000 partidas, frente a unos +48
+de la suma. La versión final, con reloj, está en [Fuerza de la 0.11](#fuerza-de-la-011).
+
+De dónde sale cada idea. "Los 14" son los motores que se estudiaron, sin contar Stockfish:
+
+- **Corrección por las dos últimas jugadas** (`stats.cpp`): 11 de los 14, entre ellos Obsidian,
+  Reckless, PlentyChess, Alexandria, Stormphrax, Viridithas y Berserk.
+- **Profundidad corregida a posteriori** (`adjust_depth_in_hindsight`): Reckless, Stormphrax,
+  Viridithas, Berserk, Alexandria y PlentyChess.
+- **Historial con un ply más tras un corte claro** (`update_cutoff_stats`): siete de los ocho que se
+  leyeron a fondo.
+- **Corte acercado a beta al cerrar el nodo** (`finish_node`): Stormphrax, Viridithas, Caissa,
+  PlentyChess y Halogen.
+- **En quietud, sin evasiones tranquilas tras una que no pierde, y corte acercado a beta**
+  (`qsearch.cpp`): Obsidian, PlentyChess y Alexandria.
+- **Cautela con correcciones grandes**, en la futilidad inversa y en las reducciones: Obsidian,
+  Stormphrax, Viridithas y PlentyChess.
+- **Historial separado por casillas atacadas** (`history.h`): 8 de los 14, entre ellos Reckless,
+  PlentyChess, Stormphrax, Viridithas, Berserk, Caissa, Clover y Halogen.
+- **Repeticiones que se pueden forzar** (`cuckoo.cpp`, `has_upcoming_repetition`): 12 de los 14. El
+  algoritmo es de Marcel van Kervinck: una tabla cuckoo con las 3668 jugadas reversibles de pieza.
+- **Escala por material** (`Worker::evaluate`): 10 de los 14, entre ellos Obsidian, Alexandria y
+  Reckless.
+- **Tanda B:** cortes de la tabla hash según el tipo de nodo (Obsidian, Alexandria, Stormphrax,
+  Berserk, Reckless y Ethereal) y cuatro diferencias que el estudio señaló frente a varios motores:
+  jugada nula solo en nodos de corte, reducción interna también con entradas poco profundas, sin
+  extensión de jaque en la variante principal y un tope de tres plies en los fallos por arriba de la
+  aspiración.
+- **Tanda C:** sustituir una entrada de una búsqueda anterior aunque sea más profunda (Reckless y
+  Stormphrax) y margen singular doble en los nodos que fueron de la variante principal.
 
 ### Ajuste de los parámetros
 
-Los números de la búsqueda están en `src/search/params.h`. Los 35 con margen para moverse se
-ajustaron con SPSA ([scripts/spsa.py](../scripts/spsa.py)): en cada iteración, dos copias del motor
-juegan con los parámetros desplazados en sentidos opuestos, y los valores avanzan hacia la que gana.
+Los números de la búsqueda están en `src/search/params.h`. Los que tienen margen para moverse, 35
+al principio y 39 en la 0.11, se ajustaron con SPSA ([scripts/spsa.py](../scripts/spsa.py)): en
+cada iteración, dos copias del motor juegan con los parámetros desplazados en sentidos opuestos, y
+los valores avanzan hacia la que gana.
 Fueron 2500 iteraciones de 8 partidas a 30 000 nodos por jugada, con la red gen3.
 
 SPSA mueve los parámetros aunque no haya nada que ganar, así que solo cuenta lo que se midió
@@ -123,9 +184,22 @@ después, en matches aparte con otras aperturas. La red es gen3 en los dos bando
 Los mayores cambios podan más las jugadas tranquilas (`kFutilityBase` baja de 95 a 73), menos las
 capturas (`kCaptureFutilityPerDepth` sube de 190 a 232) y castigan más en los historiales a las
 jugadas que no cortaron (`kHistoryMalusScale` sube de 200 a 252). Ninguno llegó a sus límites.
-El ajuste se hizo antes de tener gen4 y no se ha repetido con esa red ni con la actual. Los márgenes
-de poda siguen siendo los de entonces, y por eso cada red nueva se calibra para que sus evaluaciones
-midan parecido: ver [Red NNUE](#red-nnue).
+
+Para la 0.11 se repitió con la red b1 y la búsqueda de la 0.10.0: otras 2500 iteraciones de 8
+partidas a 30 000 nodos, en 4 h 37 min. Contra los valores anteriores, a 40 000 nodos, los nuevos
+ganan por +1321 =1859 −1171, **+12,0 ± 7,8 Elo** en 4351 partidas. Cambiaron 34 valores, casi todos
+menos de un 10 %. Los mayores: `kHistoryMalusMax` baja de 1255 a 790, `kFutilityBase` de 73 a 62,
+`kRfpMargin` de 74 a 64 y `kLmrBase` de 76 a 68, y `kHistoryBonusMax` sube de 1746 a 1992.
+
+Al final de la 0.11 se repitió sobre el código definitivo, con las ideas nuevas y la red c1: 2000
+iteraciones de 8 partidas a 30 000 nodos con 39 parámetros, en 3 h 6 min. Contra los valores de la
+ronda anterior, a 40 000 nodos, los nuevos ganan por +1882 =2896 −1725, **+8,4 ± 6,3 Elo** en 6503
+partidas. Cambiaron 34 valores, casi todos menos de un 10 %. Los mayores:
+`kCorrectionContinuationWeight` baja de 64 a 50, `kHistoryMalusOffset` de 84 a 69 y
+`kHistoryBoostMargin` de 90 a 77, y `kCaptureFutilityBase` sube de 208 a 232.
+
+Cada red nueva se calibra para que sus evaluaciones midan como las de la anterior, porque los
+márgenes de poda se ajustaron con ellas: ver [Red NNUE](#red-nnue).
 
 ## Red NNUE
 
@@ -156,12 +230,13 @@ midan parecido: ver [Red NNUE](#red-nnue).
   porque con pesos extremos, que el formato admite, no cabe en 32.
 * **Escala propia:** cada archivo de red guarda los centipeones por unidad de salida. Los márgenes
   de poda de la búsqueda se ajustaron con gen3, así que cada red nueva se calibra para que sus
-  evaluaciones midan parecido. La actual usa 155: en 693 posiciones, la pendiente da 145, la
-  desviación da 163 y la correlación con gen4 es de 0,915. No se ha medido con partidas si otro
-  valor rinde más.
+  evaluaciones midan parecido. La actual, c1, usa 144: frente a b1, en 702 posiciones, la pendiente
+  da 141, la desviación da 144 y la correlación es de 0,980. b1 usaba 155 (145 y 163 frente a gen4,
+  con una correlación de 0,915). No se ha medido con partidas si otro valor rinde más.
 
 Al cargar otra red con `EvalFile` se vacían la tabla hash y las correcciones, porque lo aprendido con
-una red no vale para otra.
+una red no vale para otra. El motor carga también redes con una cabeza más profunda: ver
+[Cabeza profunda](#cabeza-profunda-experimental).
 
 ## Cómo se entrena la red
 
@@ -174,29 +249,60 @@ genera unos 115 millones de posiciones al día, muy lejos de los 3000 millones d
 
 La receta completa está en [training/README.md](../training/README.md).
 
-- **Datos:** el ciclo T91 de Leela Chess Zero, de enero a mayo de 2026. xu-shawn lo empaquetó en
-  formato binpack, y Adam Twiss lo minimizó y lo filtró con el fork de Stockfish de linrock, en
+- **Datos de c1, la red actual:** la ejecución de prueba T80 de Leela Chess Zero, enero de 2024, en
+  [`linrock/test80-2024`](https://huggingface.co/datasets/linrock/test80-2024), ya convertida a
+  binpack y filtrada (`min-v2.v6`): un archivo de 9,2 GB.
+- **Datos de b1, la red de la 0.10.0:** el ciclo T91 de Leela Chess Zero, de enero a mayo de 2026.
+  xu-shawn lo empaquetó en formato binpack, y Adam Twiss lo minimizó y lo filtró con el fork de
+  Stockfish de linrock, en
   [`adamtwiss/t91-binpacks-filtered`](https://huggingface.co/datasets/adamtwiss/t91-binpacks-filtered):
   4440 millones de posiciones, 3080 millones de ellas entrenables. Su autor avisa de que en sus
-  pruebas daban redes unos 100 Elo más flojas que los datos de T80 en igual cantidad, de que el
-  filtrado las empeoraba unos 20 Elo y de que no los recomienda en lugar de datos contrastados. Nada
-  de eso se ha comprobado aquí.
+  pruebas daban redes unos 100 Elo más flojas que los datos de T80 en igual cantidad. Aquí, con la
+  misma receta, c1 ganó a b1 por unos 26 Elo.
 - **Entrenador:** [bullet](https://github.com/jw1912/bullet), en una NVIDIA RTX 3060 de 12 GB. Los
-  320 superlotes tardaron 6 h 40 min, a unos 1,3 millones de posiciones por segundo.
+  320 superlotes tardaron 6 h 40 min con b1 y 7 h 6 min con c1, a 1,2 o 1,3 millones de posiciones
+  por segundo.
 - **Objetivo:** mezcla de la evaluación de los datos y del resultado de la partida, con un peso del
   resultado que sube de 0,2 a 0,4. Con estos datos no se ha probado otra mezcla.
 
-| Red | Datos | Superlotes | Contra la 0.9.1, a 5 s + 0,05 |
+| Red | Datos | Superlotes | Resultado |
 |---|---|---|---|
-| a1 | Tres meses | 40 | +102 =69 −29: +133 ± 40 |
-| b1, la actual | Los cinco meses | 320 | +116 =67 −17: +189 ± 42 |
+| a1 | T91, tres meses | 40 | Contra la 0.9.1 a 5 s + 0,05: +102 =69 −29, +133 ± 40 |
+| b1 | T91, cinco meses | 320 | Contra la 0.9.1 a 5 s + 0,05: +116 =67 −17, +189 ± 42 |
+| c1, la actual | T80, enero de 2024 | 320 | Contra b1 a 40 000 nodos: +584 =735 −453, +25,7 ± 12,4 |
 
 En duelo directo a 5 s + 0,05, b1 gana a a1 por +60 =116 −24, +63 ± 31 Elo, en dos tandas de 120 y
-80 partidas por un corte de luz. Ninguna de las dos se compiló con PGO para estos duelos.
+80 partidas por un corte de luz. Ninguna de las dos se compiló con PGO para estos duelos. c1 y b1 se
+enfrentaron con la búsqueda de la 0.11 y los mismos parámetros, a igual número de nodos: tienen la
+misma arquitectura y la misma velocidad.
 
 En las primeras generaciones, con muchas menos posiciones, 1024 neuronas no ganaban a 512. Ahora, el
 conjunto de arquitectura y datos gana a la 0.9.1 pese a analizar un 16 % menos de nodos por segundo.
 Arquitectura y datos no se midieron por separado.
+
+### Cabeza profunda (experimental)
+
+El motor lee también redes con una cabeza más profunda, en el formato ENQ3. La capa oculta se
+multiplica por parejas, la neurona i por la i + 512, ambas recortadas, y en cada cubeta de salida
+siguen capas de 16, 32 y 1 neuronas. La primera usa pesos de 8 bits y solo recorre los grupos de 4
+entradas con algún valor distinto de cero; las otras dos van en coma flotante, sin FMA implícita,
+para que den lo mismo en todas las CPU. Sigue la idea del ejemplo `4_multi_layer` de bullet. En
+Tcheran, una cabeza así ganó unos 16 Elo (`NET.md`).
+
+La primera, d1, se entrenó con T80 de enero y febrero de 2024: 320 superlotes en 7 h 47 min. Frente a
+c1, su escala da 135 por pendiente y 152 por desviación, con una correlación de 0,903, y se usó 152.
+Analiza el 81 % de los nodos por segundo de c1, así que a igual tiempo juega con 32 270 nodos por
+cada 40 000:
+
+| d1 contra c1, ambas con la búsqueda de la 0.11 | Partidas | Resultado | Elo |
+|---|---|---|---|
+| A igual número de nodos, 40 000 | 1200 | +369 =540 −291 | +22,6 ± 14,6 |
+| A igual tiempo | 1521 | +362 =697 −462 | −22,9 ± 12,9 |
+
+La red es mejor, pero a este ritmo su lentitud cuesta más de lo que gana, así que la integrada sigue
+siendo c1. Una evaluación mejor pesa más cuanto más profunda es la búsqueda, y con más tiempo d1
+podría quedar a la par o por delante; no se ha medido. La receta está en
+[training/README.md](../training/README.md#cabeza-profunda-experimental).
 
 ### Generaciones anteriores, con partidas propias
 
@@ -291,14 +397,14 @@ Predicen algo mejor y juegan igual. La huella `bench` no cambia, porque la búsq
 | Acumulador incremental contra recálculo | La red evalúa igual por cualquier camino |
 | Gradiente contra diferencias finitas | La retropropagación es correcta |
 | Red cuantizada contra red flotante | La cuantización no altera la fórmula |
-| `training/convert_net.py` contra el motor | Una evaluación aparte, con las reglas del entrenador, da lo mismo que el motor |
+| `training/convert_net.py` y `convert_deep_net.py` contra el motor | Una evaluación aparte, con las reglas del entrenador, da lo mismo que el motor |
 | Compilación con AddressSanitizer | No hay accesos inválidos a memoria |
 | Compilación con `AYANO_VERIFY_NNUE` | La red no se desincroniza durante una búsqueda real |
 | Compilación portable | El camino sin AVX2 ni PEXT también es correcto |
 | `bench` | Huella que detecta cambios involuntarios en la búsqueda |
 | `bench` en cada variante | Release, portable, AVX2 sin PEXT y PGO recorren los mismos nodos |
 | Compilación con g++ en Linux | Sus tres variantes pasan los tests y recorren los mismos nodos que con MSVC |
-| `scripts/similarity.py` contra 15 motores | Solo coinciden fragmentos de pocas líneas, un 0,7 % de los tokens |
+| `scripts/similarity.py` contra 15 motores | Solo coinciden fragmentos de pocas líneas, un 0,5 % de los tokens |
 | `match` con SPRT | Cada mejora se confirma jugando, no por intuición |
 | `match` contra motores de la lista CCRL Blitz | Sitúa al motor en una escala externa |
 | `match` contra Stockfish limitado | Compara las versiones hasta la 0.9.0 con una regla fija |
@@ -351,6 +457,31 @@ tres variantes de Windows. No hubo jugadas ilegales, cuelgues ni avisos de PV il
 reloj en ninguna. En las 136 sin incremento, a 1, 2, 5 y 30 s por bando, Stockfish lo agotó 4 veces.
 Con `MultiPV` 3 a 3 s + 0,03 jugó 38 partidas sin agotarlo, pero ese caso no se ha corregido y
 puede repetirse.
+
+La 0.11.0 cambia la búsqueda, así que se repitió la misma batería: 370 partidas sin jugadas ilegales,
+cuelgues ni avisos de PV ilegal, y sin agotar el reloj en ninguna, tampoco en las 38 con `MultiPV` 3.
+En las 136 sin incremento, Stockfish lo agotó 6 veces. Cute Chess anotó en tres jugadas mucho más
+tiempo del que el motor dice haber pensado, como 88 ms frente a 32. Medido aparte, con 70 ms en el
+reloj y 30 de incremento, la 0.11.0 y la 0.10.0 responden en 33 ms como mucho y envían la jugada a
+1 ms del último informe: el resto es retraso de la interfaz con su registro detallado.
+
+### Fuerza de la 0.11
+
+La 0.11.0 no se ha medido aún contra los rivales de la lista CCRL. Contra el ejecutable publicado de
+la 0.10.0, los dos compilados con PGO, a 5 s + 0,05, con 64 MB de hash y cinco partidas a la vez sin
+nada más en el equipo, gana por +294 =539 −167, **+44,4 ± 14,6 Elo** en 1000 partidas. Ninguna se
+perdió por tiempo; el margen mínimo de reloj fue de 46 ms.
+
+| Cambio | Contra | Ritmo | Partidas | Elo |
+|---|---|---|---|---|
+| Red c1 | b1, con la búsqueda de la 0.11 | 40 000 nodos | 1772 | +25,7 ± 12,4 |
+| Ideas de otros motores y primer ajuste | 0.10.0, ambas con b1 | 40 000 nodos | 3000 | +33,7 ± 9,4 |
+| Segundo ajuste | El primero, ambos con c1 | 40 000 nodos | 6503 | +8,4 ± 6,3 |
+| Versión final | 0.10.0 publicada | 5 s + 0,05 | 1000 | **+44,4 ± 14,6** |
+
+Las pruebas a nodos fijos suman unos +68 y la versión final gana +44 con reloj. Sumar exagera, como
+ya pasó con las tandas de ideas, y la 0.11.0 analiza un 5 % menos de nodos por segundo: 1,80
+millones frente a 1,90 con `bench 18`, porque la búsqueda nueva hace más trabajo en cada nodo.
 
 ### Fuerza en la escala CCRL Blitz
 

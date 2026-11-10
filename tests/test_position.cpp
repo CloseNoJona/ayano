@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "board/cuckoo.h"
 #include "board/movegen.h"
 #include "board/position.h"
 #include "test_framework.h"
@@ -229,4 +230,46 @@ TEST(promocion_por_uci) {
   CHECK(move != Move::none());
   CHECK_EQ(move.to_uci(), std::string("a7a8n"));
   CHECK_EQ(int(pos->after(move).piece_on(A8)), int(make_piece(WHITE, KNIGHT)));
+}
+
+TEST(attacks_by_coincide_con_attackers_to) {
+  random_walks(4, 60, [](const Position& pos, const MoveList&) {
+    for (const Color c : {WHITE, BLACK}) {
+      const Bitboard attacked = pos.attacks_by(c);
+      for (int s = 0; s < SQUARE_NB; ++s) {
+        const bool by_attackers = (pos.attackers_to(Square(s)) & pos.pieces(c)) != 0;
+        CHECK_EQ(by_attackers, (attacked & square_bb(Square(s))) != 0);
+      }
+    }
+  });
+}
+
+TEST(tabla_cuckoo_reconoce_cada_jugada_reversible) {
+  CHECK_EQ(cuckoo::init(), cuckoo::kReversibleMoves);
+  int checked = 0;
+  random_walks(4, 60, [&checked](const Position& pos, const MoveList& moves) {
+    // El al paso y los derechos de enroque tambien cambian la clave: ahi no aplica.
+    if (pos.ep_square() != NO_SQUARE) return;
+    for (const ExtMove& entry : moves) {
+      const Move m = entry.move;
+      if (m.kind() != MoveKind::Normal || type_of(pos.moved_piece(m)) == PAWN ||
+          pos.is_capture(m)) {
+        continue;
+      }
+      const Position next = pos.after(m);
+      if (next.castling_rights() != pos.castling_rights()) continue;
+      const Move found = cuckoo::find(pos.key() ^ next.key());
+      const Square low = std::min(m.from(), m.to());
+      const Square high = std::max(m.from(), m.to());
+      CHECK(found == Move::normal(low, high));
+      ++checked;
+    }
+    // Una captura no es reversible: su diferencia de clave no esta en la tabla.
+    for (const ExtMove& entry : moves) {
+      if (pos.is_capture(entry.move)) {
+        CHECK(cuckoo::find(pos.key() ^ pos.after(entry.move).key()) == Move::none());
+      }
+    }
+  });
+  CHECK(checked > 1000);
 }

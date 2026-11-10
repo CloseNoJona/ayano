@@ -21,6 +21,12 @@ inline int history_malus(int depth) {
                   params::kHistoryMalusMax);
 }
 
+// Casillas que ataca el rival del bando al que le toca, para el historial principal. La idea
+// de separar el historial segun las amenazas esta en Reckless, Stormphrax, Berserk y otros.
+inline Bitboard history_threats(const Position& pos) {
+  return pos.attacks_by(~pos.side_to_move());
+}
+
 // Estado de un nodo durante su busqueda. Vive en la pila de la funcion `search`.
 struct Node {
   StackEntry* ss;
@@ -44,6 +50,7 @@ struct Node {
   Move excluded = Move::none();
   Value raw_eval = VALUE_NONE;
   Value eval = VALUE_NONE;
+  int complexity = 0;  // cuanto movio la correccion la evaluacion de la red
 
   Value best_value = -VALUE_INFINITE;
   Move best_move = Move::none();

@@ -1,6 +1,11 @@
 // Red NNUE: 768 entradas por perspectiva (pieza x casilla) para cada cubeta del rey propio,
-// una capa oculta con activacion SCReLU y una salida elegida segun las piezas que quedan.
-// El tablero se refleja para que el rey propio este siempre en el flanco de dama.
+// una capa oculta y una cabeza elegida segun las piezas que quedan. El tablero se refleja
+// para que el rey propio este siempre en el flanco de dama.
+//
+// Hay dos cabezas, y cada archivo de red dice cual usa:
+// - lineal: SCReLU de la capa oculta y una salida por cubeta (formato ENQ2);
+// - profunda: producto por parejas de la capa oculta y tres capas por cubeta, de 16, 32 y 1
+//   neuronas (formato ENQ3). Sigue la idea del ejemplo 4_multi_layer de bullet (MIT).
 #pragma once
 
 #include <array>
@@ -28,13 +33,38 @@ inline constexpr int kQuantWeight = 64;       // escala de la capa de salida (QB
 inline constexpr int kDefaultEvalScale = 200;
 inline constexpr int kMaxEvalScale = 2000;
 
+// Cabeza profunda. La neurona i se multiplica por la i + kPairs, ambas recortadas a [0, QA],
+// y el producto se lleva a [0, 127] para que maddubs sume dos productos u8 x i8 sin saturar.
+inline constexpr int kPairs = kHidden / 2;
+inline constexpr int kDeepInputs = 2 * kPairs;  // las parejas de las dos perspectivas
+inline constexpr int kDeepL1 = 16;
+inline constexpr int kDeepL2 = 32;
+inline constexpr int kPairShift = 9;
+inline constexpr int kPairMax = (kQuantActivation * kQuantActivation) >> kPairShift;
+inline constexpr int kDeepWeightScale = 64;  // escala de los pesos int8 de la primera capa
+static_assert(kPairMax <= 127, "maddubs suma dos productos u8 x i8 en 16 bits con signo");
+static_assert(kPairs % 32 == 0, "AVX2 procesa las parejas de 32 en 32");
+
+enum class Head : std::uint8_t { Linear, Deep };
+
 struct alignas(64) Network {
   std::array<std::int16_t, kFeatures * kHidden> feature_weights;  // [entrada][neurona]
   std::array<std::int16_t, kHidden> feature_bias;
-  // [cubeta][bando con turno, bando sin turno][neurona]
+  // Cabeza lineal: [cubeta][bando con turno, bando sin turno][neurona]
   std::array<std::int16_t, kOutputBuckets * 2 * kHidden> output_weights;
   std::array<std::int16_t, kOutputBuckets> output_bias;
+  // Cabeza profunda. Primera capa: [cubeta][grupo de 4 entradas][neurona][entrada del grupo],
+  // con las entradas del bando con turno primero: asi cada grupo no nulo suma sus 4 entradas a
+  // las 16 neuronas de una vez. Segunda: [cubeta][entrada][neurona], para sumar varias neuronas
+  // a la vez sin cambiar el orden de las sumas de cada una.
+  alignas(64) std::array<std::int8_t, kOutputBuckets * kDeepL1 * kDeepInputs> l1_weights;
+  std::array<float, kOutputBuckets * kDeepL1> l1_bias;
+  std::array<float, kOutputBuckets * kDeepL1 * kDeepL2> l2_weights;
+  std::array<float, kOutputBuckets * kDeepL2> l2_bias;
+  std::array<float, kOutputBuckets * kDeepL2> l3_weights;
+  std::array<float, kOutputBuckets> l3_bias;
   std::int32_t eval_scale;
+  Head head = Head::Linear;
 };
 
 // Refleja la casilla si el rey de esa perspectiva esta en las columnas e-h.

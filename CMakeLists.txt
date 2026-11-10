@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(ayano VERSION 0.10.0 LANGUAGES CXX)
+project(ayano VERSION 0.11.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,7 +30,8 @@ if(MSVC)
     target_compile_options(ayano_flags INTERFACE /arch:AVX2)
   endif()
 else()
-  target_compile_options(ayano_flags INTERFACE -Wall -Wextra -Wpedantic
+  # Sin FMA implicita: la cabeza profunda de la red da asi el mismo numero en todas las CPU.
+  target_compile_options(ayano_flags INTERFACE -Wall -Wextra -Wpedantic -ffp-contract=off
     $<$<CONFIG:Release>:-O3 -DNDEBUG>)
   if(AYANO_NATIVE)
     target_compile_options(ayano_flags INTERFACE -mavx2 -mbmi -mbmi2 -mpopcnt -mlzcnt)

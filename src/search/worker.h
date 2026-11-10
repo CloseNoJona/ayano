@@ -82,6 +82,8 @@ struct StackEntry {
   std::array<Move, 2> killers;
   Value static_eval;
   int cutoff_count;
+  int reduction;  // plies que la busqueda reducida quita al hijo; 0 fuera de ella
+  Bitboard threats;  // casillas que ataca el rival; eligen la subtabla del historial principal
   bool in_check;
   bool tt_pv;
 };
@@ -142,6 +144,7 @@ class Worker {
   void probe_tt(Node& n);
   bool can_cut_with_tt(const Node& n) const;
   void compute_static_eval(Node& n);
+  void adjust_depth_in_hindsight(Node& n) const;
   void learn_from_eval_swing(const Node& n);
   Value forward_prune(Node& n);
   Value null_move_search(Node& n);
@@ -169,11 +172,14 @@ class Worker {
 
   bool is_draw(const Position& pos, int ply) const;
   bool is_repetition(const Position& pos, int ply) const;
+  bool has_upcoming_repetition(const Position& pos, int ply) const;
+  bool claim_upcoming_draw(const Position& pos, int ply, Value& alpha, Value beta) const;
   Value draw_value() const { return VALUE_DRAW - 1 + Value(nodes() & 2); }
 
   Value evaluate(int ply);
-  Value corrected_eval(const Position& pos, Value raw) const;
-  void update_correction(const Position& pos, int depth, Value difference);
+  Value corrected_eval(const StackEntry* ss, Value raw) const;
+  void update_correction(const StackEntry* ss, int depth, Value difference);
+  HistoryValue* continuation_correction_entry(const StackEntry* ss) const;
   void update_continuation(StackEntry* ss, Piece pc, Square to, int bonus);
   void update_quiet_history(const Position& pos, StackEntry* ss, Move m, int bonus);
   void update_capture_history(const Position& pos, Move m, int bonus);

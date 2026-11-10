@@ -118,6 +118,17 @@ Bitboard Position::attackers_to(Square s, Bitboard occupied) const {
          (attacks::bishop(s, occupied) & pieces(BISHOP, QUEEN));
 }
 
+Bitboard Position::attacks_by(Color c) const {
+  const Bitboard occupied = pieces();
+  const Bitboard pawns = pieces(c, PAWN);
+  Bitboard result = c == WHITE ? shift<NORTH_EAST>(pawns) | shift<NORTH_WEST>(pawns)
+                               : shift<SOUTH_EAST>(pawns) | shift<SOUTH_WEST>(pawns);
+  for (Bitboard b = pieces(c, KNIGHT); b;) result |= attacks::knight(pop_lsb(b));
+  for (Bitboard b = pieces(c, BISHOP, QUEEN); b;) result |= attacks::bishop(pop_lsb(b), occupied);
+  for (Bitboard b = pieces(c, ROOK, QUEEN); b;) result |= attacks::rook(pop_lsb(b), occupied);
+  return result | attacks::king(king_sq_[c]);
+}
+
 void Position::apply_to(Move m, Position& out) const {
   out = *this;
 

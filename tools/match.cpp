@@ -2,9 +2,10 @@
 //
 // Uso: match --engine1 a.exe --engine2 b.exe --games 1000 --concurrency 5 --tc 8+0.08
 //            [--opt1 "Use NNUE=false"] [--opt2 "EvalFile=x.nnue"] [--nodes 20000]
-//            [--sprt 0 5] [--seed 1]
+//            [--nodes2 16000] [--sprt 0 5] [--seed 1]
 // Las opciones se separan con ';'. Cada apertura se juega dos veces con colores
-// invertidos para cancelar la ventaja de la apertura.
+// invertidos para cancelar la ventaja de la apertura. Con --nodes2 el motor 2 recibe otro
+// numero de nodos: asi se compara a igual tiempo un motor mas lento sin depender de la carga.
 #ifndef _WIN32
 #error "match.cpp usa la API de procesos de Windows"
 #endif
@@ -13,6 +14,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -196,6 +198,7 @@ struct Config {
   std::int64_t base_ms = 8000;
   std::int64_t increment_ms = 80;
   std::uint64_t nodes = 0;
+  std::uint64_t nodes2 = 0;  // nodos del motor 2 si difieren: compensa que sea mas lento
   std::uint64_t seed = 1;
   bool use_sprt = false;
   double elo0 = 0;
@@ -346,8 +349,8 @@ struct Clock {
   std::array<std::int64_t, COLOR_NB> remaining_ms;
 };
 
-std::string go_command(const Config& config, const Clock& clock) {
-  if (config.nodes > 0) return "go nodes " + std::to_string(config.nodes);
+std::string go_command(const Config& config, const Clock& clock, std::uint64_t nodes) {
+  if (nodes > 0) return "go nodes " + std::to_string(nodes);
   std::ostringstream command;
   command << "go wtime " << clock.remaining_ms[WHITE] << " btime " << clock.remaining_ms[BLACK]
           << " winc " << config.increment_ms << " binc " << config.increment_ms;
@@ -408,11 +411,11 @@ struct Reply {
 };
 
 Reply ask_engine(EngineProcess& engine, const std::string& history, const Config& config,
-                 const Clock& clock, Color us) {
+                 const Clock& clock, Color us, std::uint64_t nodes) {
   engine.send(history);
-  engine.send(go_command(config, clock));
+  engine.send(go_command(config, clock, nodes));
   const std::int64_t budget =
-      config.nodes > 0 ? kNodeLimitBudgetMs : clock.remaining_ms[us] + kTimeGraceMs;
+      nodes > 0 ? kNodeLimitBudgetMs : clock.remaining_ms[us] + kTimeGraceMs;
   const auto start = std::chrono::steady_clock::now();
   Reply reply;
   reply.text = request_move(engine, budget, reply.score);
@@ -485,8 +488,10 @@ void note_margin(Totals& totals, std::int64_t left_ms, std::int64_t spent_ms) {
   totals.left_at_min_margin_ms = left_ms;
 }
 
+// `nodes` es el limite de nodos de cada color: 0 si se juega con reloj.
 GameRecord play_game(EngineProcess& white, EngineProcess& black, const Opening& opening,
-                     const Config& config, Totals& totals) {
+                     const Config& config, const std::array<std::uint64_t, COLOR_NB>& nodes,
+                     Totals& totals) {
   GameState game;
   for (const Move m : opening.moves) game.play(m);
 
@@ -502,7 +507,7 @@ GameRecord play_game(EngineProcess& white, EngineProcess& black, const Opening& 
     const Color us = game.pos.side_to_move();
     EngineProcess& engine = us == WHITE ? white : black;
     const std::int64_t left_ms = clock.remaining_ms[us];
-    const Reply reply = ask_engine(engine, game.history, config, clock, us);
+    const Reply reply = ask_engine(engine, game.history, config, clock, us, nodes[us]);
 
     if (reply.text.empty()) {
       const char* what = engine.has_exited() ? "motor caido" : "sin respuesta";
@@ -598,7 +603,10 @@ void run_worker(const Config& config, const std::vector<Opening>& openings, Tota
     const bool engine1_is_white = game % 2 == 0;
     EngineProcess& white = engine1_is_white ? first : second;
     EngineProcess& black = engine1_is_white ? second : first;
-    const GameRecord record = play_game(white, black, opening, config, totals);
+    const std::uint64_t nodes2 = config.nodes2 > 0 ? config.nodes2 : config.nodes;
+    const std::array<std::uint64_t, COLOR_NB> nodes =
+        engine1_is_white ? std::array{config.nodes, nodes2} : std::array{nodes2, config.nodes};
+    const GameRecord record = play_game(white, black, opening, config, nodes, totals);
     record_game(totals, config, record, engine1_is_white);
   }
 }
@@ -629,6 +637,7 @@ bool parse_args(int argc, char** argv, Config& config) {
     else if (name == "--games") config.games = std::stoi(value);
     else if (name == "--concurrency") config.concurrency = std::stoi(value);
     else if (name == "--nodes") config.nodes = std::stoull(value);
+    else if (name == "--nodes2") config.nodes2 = std::stoull(value);
     else if (name == "--seed") config.seed = std::stoull(value);
     else if (name == "--tc") {
       if (!parse_time_control(value, config)) return false;
@@ -637,8 +646,9 @@ bool parse_args(int argc, char** argv, Config& config) {
       return false;
     }
   }
+  // --nodes2 solo cambia los nodos del motor 2: sin --nodes se jugaria con reloj.
   return !config.engine1.empty() && !config.engine2.empty() && config.games > 0 &&
-         config.concurrency > 0;
+         config.concurrency > 0 && (config.nodes2 == 0 || config.nodes > 0);
 }
 
 }  // namespace
@@ -648,7 +658,8 @@ int main(int argc, char** argv) {
   try {
     if (!parse_args(argc, argv, config)) {
       std::cerr << "Uso: match --engine1 a --engine2 b --games N --concurrency N --tc 8+0.08 "
-                   "[--opt1 a=b;c=d] [--opt2 ...] [--nodes N] [--sprt elo0 elo1] [--seed N]\n";
+                   "[--opt1 a=b;c=d] [--opt2 ...] [--nodes N [--nodes2 N]] [--sprt elo0 elo1] "
+                   "[--seed N]\n";
       return 1;
     }
   } catch (const std::exception& error) {

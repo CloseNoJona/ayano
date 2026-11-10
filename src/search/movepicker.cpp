@@ -49,13 +49,15 @@ Threats compute_threats(const Position& pos, Color them) {
 }  // namespace
 
 MovePicker::MovePicker(const Position& pos, Move tt_move, const Histories& histories,
-                       const ContinuationRefs& continuation, const Refutations& refutations)
+                       const ContinuationRefs& continuation, const Refutations& refutations,
+                       Bitboard threats)
     : pos_(pos),
       histories_(histories),
       continuation_(&continuation),
       refutations_(refutations),
       tt_move_(Move::none()),
-      threshold_(0) {
+      threshold_(0),
+      threats_(threats) {
   const bool usable = tt_move != Move::none() && pos.is_pseudo_legal(tt_move);
   if (usable) tt_move_ = tt_move;
   if (pos.in_check()) {
@@ -66,13 +68,14 @@ MovePicker::MovePicker(const Position& pos, Move tt_move, const Histories& histo
 }
 
 MovePicker::MovePicker(const Position& pos, Move tt_move, const Histories& histories,
-                       const ContinuationRefs& continuation)
+                       const ContinuationRefs& continuation, Bitboard threats)
     : pos_(pos),
       histories_(histories),
       continuation_(&continuation),
       refutations_{Move::none(), Move::none(), Move::none()},
       tt_move_(Move::none()),
-      threshold_(0) {
+      threshold_(0),
+      threats_(threats) {
   const bool in_check = pos.in_check();
   // Sin jaque solo se admiten jugadas tacticas: la quietud debe terminar.
   const bool usable = tt_move != Move::none() && pos.is_pseudo_legal(tt_move) &&
@@ -92,7 +95,8 @@ MovePicker::MovePicker(const Position& pos, Move tt_move, Value threshold,
       continuation_(nullptr),
       refutations_{Move::none(), Move::none(), Move::none()},
       tt_move_(Move::none()),
-      threshold_(threshold) {
+      threshold_(threshold),
+      threats_(0) {
   const bool usable = tt_move != Move::none() && pos.is_pseudo_legal(tt_move) &&
                       pos.is_capture(tt_move) && pos.see_ge(tt_move, threshold);
   if (usable) tt_move_ = tt_move;
@@ -114,7 +118,6 @@ void MovePicker::score_captures() {
 
 void MovePicker::score_quiets() {
   const Color us = pos_.side_to_move();
-  const auto& main = histories_.main[us];
   const auto& pawn = histories_.pawn[pos_.pawn_key() % kPawnHistorySize];
   const ContinuationRefs& refs = *continuation_;
   const Threats threats = compute_threats(pos_, ~us);
@@ -124,7 +127,7 @@ void MovePicker::score_quiets() {
     const Piece pc = pos_.moved_piece(m);
     const Square to = m.to();
 
-    int value = 2 * main[m.from_to()] + 2 * pawn[pc][to];
+    int value = 2 * main_entry(histories_.main, us, threats_, m) + 2 * pawn[pc][to];
     value += (*refs[0])[pc][to] + (*refs[1])[pc][to];
     value += (*refs[2])[pc][to] + (*refs[3])[pc][to] / 2;
 
@@ -137,7 +140,6 @@ void MovePicker::score_quiets() {
 
 void MovePicker::score_evasions() {
   const Color us = pos_.side_to_move();
-  const auto& main = histories_.main[us];
   const ContinuationRefs& refs = *continuation_;
 
   for (ExtMove* entry = cur_; entry < end_; ++entry) {
@@ -146,7 +148,7 @@ void MovePicker::score_evasions() {
     if (pos_.is_capture(m)) {
       entry->value = kEvasionCaptureBase + see_value(pos_.captured_type(m)) - int(type_of(pc));
     } else {
-      entry->value = main[m.from_to()] + (*refs[0])[pc][m.to()];
+      entry->value = main_entry(histories_.main, us, threats_, m) + (*refs[0])[pc][m.to()];
     }
   }
 }

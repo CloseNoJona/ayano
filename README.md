@@ -27,6 +27,9 @@ La regla es la lista [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) del 31
 Ayano 0.10.0 ronda los **3659, entre 3627 y 3689**, y la 0.9.1, los **3502, entre 3473 y 3535**: la
 mejora es de unos **+157 Elo**.
 
+La 0.11.0 todavía no ha jugado contra estos rivales. Contra la 0.10.0 gana por **+44 ± 15 Elo** a
+5 s + 0,05, pero una diferencia entre versiones del mismo motor no se traslada tal cual a esta escala.
+
 Se jugaron 100 partidas contra cada rival a 120 s + 1 s, con un hilo y 64 MB de hash por motor:
 
 | Versión | Rival y su rating | Resultado | Diferencia | Rating que implica |
@@ -52,6 +55,7 @@ otros rivales.
 
 | Partidas con 5 s por bando y 0,05 s de incremento | Partidas | Resultado |
 |---|---|---|
+| Ayano 0.11.0 contra 0.10.0 | 1000 | **+44 ± 15 Elo** |
 | Ayano 0.10.0 contra 0.9.1 | 200 | **+189 ± 42 Elo** |
 | Ayano 0.9.1 contra 0.9.0 | 200 | −12 ± 28 Elo, sin diferencia apreciable |
 | Ayano 0.9.0 contra 0.8.0 | 1000 | **+113 ± 17 Elo** |
@@ -65,28 +69,29 @@ Las tres últimas filas son anteriores a gen4.
 
 | Medida | Resultado |
 |---|---|
-| Velocidad con la red | 2,0 millones de nodos por segundo y hilo, un 16 % menos que la 0.9.1 |
+| Velocidad con la red | 1,8 millones de nodos por segundo y hilo, un 5 % menos que la 0.10.0 |
 | Profundidad completada desde la posición inicial | 26 en 5 segundos |
-| Bratko-Kopec, 2 s y 2 hilos | 20 de 24, en dos pasadas |
+| Bratko-Kopec, 2 s y 2 hilos | 21 de 24, en dos pasadas |
 | Perft | Exacto en toda la suite, unos 800 millones de nodos |
 
-La red nueva es mayor y por eso va más lenta. Las cifras de fuerza ya incluyen ese coste.
+La búsqueda de la 0.11 hace más trabajo en cada nodo y por eso va algo más lenta. Las cifras de fuerza
+ya incluyen ese coste.
 
 ### Prueba en Cute Chess
 
 La 0.9.1 nace de probar la 0.9.0 en Cute Chess 1.5.1, el primer gestor externo que usó. No jugó
 ninguna jugada ilegal ni se colgó, pero aparecieron fallos que las pruebas anteriores no veían:
 
-| Prueba | 0.9.0 | 0.9.1 | 0.10.0 |
-|---|---|---|---|
-| Reloj agotado a 5 s por bando, sin incremento | 10 de 48 partidas | 0 de 48 | 0 de 48 |
-| Reloj agotado a 2 s por bando, sin incremento | 9 de 32 | 0 de 32 | 0 de 32 |
-| Avisos de jugadas ilegales en las líneas de análisis | 202 en 338 partidas | 0 en 726 | 0 en 370 |
+| Prueba | 0.9.0 | 0.9.1 | 0.10.0 | 0.11.0 |
+|---|---|---|---|---|
+| Reloj agotado a 5 s por bando, sin incremento | 10 de 48 partidas | 0 de 48 | 0 de 48 | 0 de 48 |
+| Reloj agotado a 2 s por bando, sin incremento | 9 de 32 | 0 de 32 | 0 de 32 | 0 de 32 |
+| Avisos de jugadas ilegales en las líneas de análisis | 202 en 338 partidas | 0 en 726 | 0 en 370 | 0 en 370 |
 
-Con las opciones por defecto, la 0.9.1 y la 0.10.0 tampoco agotaron el reloj con incremento ni con
-control de jugadas. La 0.9.1 sí lo agotó 1 vez en 48 con `MultiPV` 3 a 3 s + 0,03. La 0.10.0 no lo
-agotó en 38, pero ese caso extremo no se ha corregido. El detalle está en
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#prueba-en-cute-chess).
+Con las opciones por defecto, de la 0.9.1 en adelante tampoco agotaron el reloj con incremento ni con
+control de jugadas. La 0.9.1 sí lo agotó 1 vez en 48 con `MultiPV` 3 a 3 s + 0,03. La 0.10.0 y la
+0.11.0 no lo agotaron en 38 partidas cada una, pero ese caso extremo no se ha corregido. El detalle
+está en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#prueba-en-cute-chess).
 
 ## Descargar
 
@@ -208,6 +213,10 @@ match --engine1 ayano.exe --engine2 stockfish.exe --opt2 "UCI_LimitStrength=true
 Para medir con reloj, cambia `--nodes 1000000` por `--tc 120+1`, deja la máquina libre y juega
 menos partidas a la vez que núcleos tenga.
 
+Con `--nodes2`, el segundo motor juega con otro límite de nodos. Sirve para comparar a igual tiempo
+un motor más lento sin depender de la carga: cada uno recibe los nodos que analiza en el mismo
+tiempo, medidos con `bench`.
+
 **Medir la resolución de posiciones tácticas:**
 
 ```bash
@@ -273,25 +282,35 @@ decidió qué medir y qué publicar.
 
 Las técnicas están documentadas en la
 [Chess Programming Wiki](https://www.chessprogramming.org) y en la comunidad de motores abiertos.
-El código del motor se escribió sin abrir el de otros motores. Para la red de la 0.10.0 sí se leyó
-documentación ajena: los README de Coda y de otros motores, `NET.md` de Tcheran y la documentación,
-los ejemplos y parte del código del entrenador bullet. Una IA puede reproducir de memoria lo que vio
-al entrenarse, así que el código se comparó con [scripts/similarity.py](scripts/similarity.py) con el
-de 15 motores: Stockfish 19, Alexandria, Berserk, Caissa, Clover, Ethereal, Halogen, Koivisto,
-Obsidian, PlentyChess, Reckless, Seer, Stormphrax, Viridithas y Weiss.
+Hasta la 0.10.0, el código del motor se escribió sin abrir el de otros motores. Para la red de la
+0.10.0 sí se leyó documentación ajena: los README de Coda y de otros motores, `NET.md` de Tcheran y
+la documentación, los ejemplos y parte del código del entrenador bullet.
 
-Coincide un 0,7 % de los tokens, en fragmentos de pocas líneas: definiciones básicas, como la lista
+Para la 0.11, a propuesta de Jonathan Garcia, un subagente de Claude leyó la búsqueda de Reckless,
+PlentyChess, Obsidian, Alexandria, Stormphrax, Viridithas, Caissa y Berserk, contó en otros seis
+cuántos usaban cada idea y las describió en palabras. El código nuevo se escribió desde esas
+descripciones, sin copiar el ajeno. Cada idea se midió con partidas, sus números se ajustaron aquí y
+su origen está citado en el código y en
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#ideas-de-otros-motores).
+
+Una IA puede reproducir de memoria lo que vio al entrenarse, así que el código se comparó con
+[scripts/similarity.py](scripts/similarity.py) con el de 15 motores: Stockfish 19, Alexandria,
+Berserk, Caissa, Clover, Ethereal, Halogen, Koivisto, Obsidian, PlentyChess, Reckless, Seer,
+Stormphrax, Viridithas y Weiss.
+
+Coincide un 0,5 % de los tokens, en fragmentos de pocas líneas: definiciones básicas, como la lista
 de casillas, y fórmulas habituales, como el ajuste de la ventana de aspiración. Entre las series de
 números coinciden las que vienen dadas por su función, como los saltos del caballo y del rey, los
 valores publicados de perft y las constantes de SplitMix64, un generador de dominio público. También
 coincide una tabla de diseño: las 8 cubetas de rey de la red son idénticas a las de Halogen. Se
-escribieron reduciendo las del ejemplo de bullet, sin abrir Halogen. La herramienta busca secuencias
-iguales, así que no detectaría una lógica copiada y reescrita. Con Reckless y Viridithas, que están
-en Rust, solo tiene sentido comparar los números.
+escribieron reduciendo las del ejemplo de bullet, sin abrir Halogen. Las ideas de la 0.11 no
+añadieron coincidencias: la única nueva es la serie 0, 4, 1, 5, 2, 6, 3, 7, el orden de una suma por
+parejas. La herramienta busca secuencias iguales, así que no detectaría una lógica copiada y
+reescrita. Con Reckless y Viridithas, que están en Rust, solo tiene sentido comparar los números.
 
-Hasta la 0.9.1, las redes aprendieron solo de sus propias partidas. La de la 0.10.0 se entrenó con
-partidas de [Leela Chess Zero](https://lczero.org), convertidas y filtradas por otras personas con
-herramientas de Stockfish. El entrenador es [bullet](https://github.com/jw1912/bullet), de Jamie
+Hasta la 0.9.1, las redes aprendieron solo de sus propias partidas. Las de la 0.10.0 y la 0.11 se
+entrenaron con partidas de [Leela Chess Zero](https://lczero.org), convertidas y filtradas por otras
+personas con herramientas de Stockfish. El entrenador es [bullet](https://github.com/jw1912/bullet), de Jamie
 Whiting. Ni el código de Stockfish ni sus partidas forman parte de Ayano. Mantissa, Frozenight, Carp
 y Motor solo se usaron como rivales. Stockfish y Clover fueron también rivales y entraron en la
 comparación de código, y Stockfish analizó las partidas del motor en Lichess.
@@ -311,7 +330,7 @@ GPL-3.0 o posterior. El texto está en [LICENSE](LICENSE).
 La red integrada se entrenó con datos que exigen este aviso:
 
 Contains information from
-[Filtered LC0 T91 (min-v2.v6)](https://huggingface.co/datasets/adamtwiss/t91-binpacks-filtered),
+[Leela Chess Zero training data, test80 2024, filtered (min-v2.v6)](https://huggingface.co/datasets/linrock/test80-2024),
 which is made available here under the
 [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).
 
@@ -329,20 +348,26 @@ proposed the project, provided the hardware and decided what to measure and publ
 become 1.0 once it has an external measurement and has been tested on other machines. Version 0.8.0
 was first published as 1.0, and its files keep that name.
 
-No code from other engines was opened while writing the engine. For the 0.10.0 network, third-party
-documentation was read: the READMEs of Coda and other engines, Tcheran's `NET.md`, and the
-documentation, examples and part of the code of the bullet trainer. An AI can still reproduce from
-memory what it saw in training, so the code was compared with
+Up to version 0.10.0, no code from other engines was opened while writing the engine. For the
+0.10.0 network, third-party documentation was read: the READMEs of Coda and other engines, Tcheran's
+`NET.md`, and the documentation, examples and part of the code of the bullet trainer. For 0.11, at
+Jonathan Garcia's suggestion, a Claude subagent read the search code of Reckless, PlentyChess,
+Obsidian, Alexandria, Stormphrax, Viridithas, Caissa and Berserk, counted how many of six other
+engines used each idea, and described the ideas in words. The new code was written from those
+descriptions without copying. Each idea was measured with games, its numbers were tuned here, and
+its origin is cited in the code and in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+An AI can still reproduce from memory what it saw in training, so the code was compared with
 [scripts/similarity.py](scripts/similarity.py) against 15 engines, including Stockfish 19, Ethereal,
-Berserk, Koivisto and Stormphrax. About 0.7 % of the tokens match, in
+Berserk, Koivisto and Stormphrax. About 0.5 % of the tokens match, in
 fragments of a few lines: basic definitions such as the list of squares, and common formulas such as
 the aspiration window update. One design table also matches: the 8 king buckets of the network are
 identical to Halogen's. They were written by reducing those of the bullet example, without opening
-Halogen. The tool looks for identical sequences, so it would not detect copied logic that was
-rewritten.
+Halogen. The 0.11 ideas added no matches. The tool looks for identical sequences, so it would not
+detect copied logic that was rewritten.
 
-Up to version 0.9.1, the networks learned only from the engine's own games. The 0.10.0 network was
-trained with [bullet](https://github.com/jw1912/bullet), by Jamie Whiting, on
+Up to version 0.9.1, the networks learned only from the engine's own games. The 0.10.0 and 0.11
+networks were trained with [bullet](https://github.com/jw1912/bullet), by Jamie Whiting, on
 [Leela Chess Zero](https://lczero.org) games, converted and filtered by other people with Stockfish
 tools. No Stockfish code or games are part of Ayano. Mantissa, Frozenight, Carp and Motor were used
 only as opponents. Stockfish and Clover were also opponents and were part of the code comparison,
@@ -358,9 +383,10 @@ Strength was measured on an AMD Ryzen 5 5600 against engines on the
 at 120 s + 1 s, with one thread and 64 MB of hash per engine. Version 0.10.0 scored about 3659,
 between 3627 and 3689, against Motor 0.9.0 and Clover 9.1. Version 0.9.1 scored about 3502, between
 3473 and 3535, against Mantissa 3.7.2, Frozenight 6.0.0 and Carp 3.0.1. In a direct match at 5 s +
-0.05, 0.10.0 beat 0.9.1 by +189 ± 42 Elo over 200 games. These are the project's own measurements,
-not CCRL ratings. Earlier figures such as 3275 for 0.9.0 are on the `UCI_Elo` scale of limited
-Stockfish and cannot be compared with these.
+0.05, 0.10.0 beat 0.9.1 by +189 ± 42 Elo over 200 games, and 0.11.0 beat 0.10.0 by +44 ± 15 Elo
+over 1000 games; 0.11.0 has not yet played the CCRL engines. These are the project's own
+measurements, not CCRL ratings. Earlier figures such as 3275 for 0.9.0 are on the `UCI_Elo` scale
+of limited Stockfish and cannot be compared with these.
 
 Version 0.9.1 fixed the problems found in Cute Chess 1.5.1: 0.9.0 ran out of time in 10 of 48 games
 at 5 s per side without increment, and sent illegal moves in some analysis lines. It has been tested
@@ -373,6 +399,6 @@ about 7 times fewer nodes per second. To build it yourself, use `scripts\build.c
 `make -j4` on Linux. The license is GPL-3.0 or later.
 
 The built-in network requires this notice: Contains information from
-[Filtered LC0 T91 (min-v2.v6)](https://huggingface.co/datasets/adamtwiss/t91-binpacks-filtered),
+[Leela Chess Zero training data, test80 2024, filtered (min-v2.v6)](https://huggingface.co/datasets/linrock/test80-2024),
 which is made available here under the
 [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).

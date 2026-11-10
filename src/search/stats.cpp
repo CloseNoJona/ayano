@@ -7,21 +7,35 @@
 
 namespace ayano {
 
-Value Worker::corrected_eval(const Position& pos, Value raw) const {
+// Entrada de correccion de las dos ultimas jugadas, o nullptr si alguna fue nula o no existe.
+// La idea, extendida entre los motores abiertos, se vio en Obsidian, Caissa y Reckless.
+HistoryValue* Worker::continuation_correction_entry(const StackEntry* ss) const {
+  const Move last = ss[-1].move;
+  const Move before = ss[-2].move;
+  if (!last.is_ok() || !before.is_ok()) return nullptr;
+  return &histories_->continuation_correction[ss[-2].pos.moved_piece(before)][before.to()]
+                                             [ss[-1].pos.moved_piece(last)][last.to()];
+}
+
+Value Worker::corrected_eval(const StackEntry* ss, Value raw) const {
+  const Position& pos = ss->pos;
   const Color us = pos.side_to_move();
   const Histories& h = *histories_;
   const int pawn = h.pawn_correction[us][pos.pawn_key() % kCorrectionSize];
   const int minor = h.minor_correction[us][pos.minor_key() % kCorrectionSize];
   const int white = h.non_pawn_correction[WHITE][us][pos.non_pawn_key(WHITE) % kCorrectionSize];
   const int black = h.non_pawn_correction[BLACK][us][pos.non_pawn_key(BLACK) % kCorrectionSize];
+  const HistoryValue* continuation = continuation_correction_entry(ss);
   const int correction = params::kCorrectionPawnWeight * pawn +
                          params::kCorrectionMinorWeight * minor +
-                         params::kCorrectionNonPawnWeight * (white + black);
+                         params::kCorrectionNonPawnWeight * (white + black) +
+                         params::kCorrectionContinuationWeight * (continuation ? *continuation : 0);
   const Value value = raw + correction / (params::kCorrectionDivisor * 8);
   return std::clamp(value, VALUE_MATED_IN_MAX_PLY + 1, VALUE_MATE_IN_MAX_PLY - 1);
 }
 
-void Worker::update_correction(const Position& pos, int depth, Value difference) {
+void Worker::update_correction(const StackEntry* ss, int depth, Value difference) {
+  const Position& pos = ss->pos;
   const Color us = pos.side_to_move();
   Histories& h = *histories_;
   const int bonus = std::clamp(difference * depth / 8, -params::kCorrectionScale,
@@ -33,6 +47,9 @@ void Worker::update_correction(const Position& pos, int depth, Value difference)
       h.non_pawn_correction[WHITE][us][pos.non_pawn_key(WHITE) % kCorrectionSize], bonus);
   update_history<kCorrectionLimit>(
       h.non_pawn_correction[BLACK][us][pos.non_pawn_key(BLACK) % kCorrectionSize], bonus);
+  if (HistoryValue* continuation = continuation_correction_entry(ss)) {
+    update_history<kCorrectionLimit>(*continuation, bonus);
+  }
 }
 
 void Worker::update_continuation(StackEntry* ss, Piece pc, Square to, int bonus) {
@@ -47,7 +64,8 @@ void Worker::update_continuation(StackEntry* ss, Piece pc, Square to, int bonus)
 void Worker::update_quiet_history(const Position& pos, StackEntry* ss, Move m, int bonus) {
   const Piece pc = pos.moved_piece(m);
   Histories& h = *histories_;
-  update_history<kMainHistoryLimit>(h.main[pos.side_to_move()][m.from_to()], bonus);
+  update_history<kMainHistoryLimit>(main_entry(h.main, pos.side_to_move(), ss->threats, m),
+                                    bonus);
   update_history<kPawnHistoryLimit>(h.pawn[pos.pawn_key() % kPawnHistorySize][pc][m.to()], bonus);
   update_continuation(ss, pc, m.to(), bonus);
 }
@@ -70,8 +88,11 @@ void Worker::set_refutations(const Position& pos, StackEntry* ss, Move best) {
 
 void Worker::update_cutoff_stats(Node& n) {
   const Position& pos = n.pos;
-  const int bonus = history_bonus(n.depth);
-  const int malus = history_malus(n.depth);
+  // Un corte muy por encima de beta dice mas que uno justo: cuenta como uno mas profundo
+  // (siete de los ocho motores que se estudiaron a fondo lo hacen).
+  const int depth = n.depth + int(n.best_value > n.beta + params::kHistoryBoostMargin);
+  const int bonus = history_bonus(depth);
+  const int malus = history_malus(depth);
 
   if (pos.is_tactical(n.best_move)) {
     update_capture_history(pos, n.best_move, bonus);
@@ -94,8 +115,8 @@ void Worker::update_prior_move_stats(Node& n) {
   if (!prior.is_ok() || n.pos.captured_piece() != NO_PIECE) return;
   const int bonus = history_bonus(n.depth);
   update_continuation(n.ss - 1, n.pos.piece_on(prior.to()), prior.to(), bonus);
-  update_history<kMainHistoryLimit>(histories_->main[~n.pos.side_to_move()][prior.from_to()],
-                                    bonus / 2);
+  update_history<kMainHistoryLimit>(
+      main_entry(histories_->main, ~n.pos.side_to_move(), ss[-1].threats, prior), bonus / 2);
 }
 
 }  // namespace ayano

@@ -2,6 +2,7 @@
 #include <cstring>
 #include <iostream>
 
+#include "board/cuckoo.h"
 #include "core/attacks.h"
 #include "core/zobrist.h"
 #include "test_framework.h"
@@ -19,6 +20,7 @@ int main(int argc, char** argv) {
 
   ayano::attacks::init();
   ayano::zobrist::init();
+  ayano::cuckoo::init();
 
   int executed = 0;
   for (const testfw::TestCase& test : testfw::registry()) {

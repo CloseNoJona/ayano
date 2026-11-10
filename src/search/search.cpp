@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 
 #include "search/node.h"
 #include "search/params.h"
@@ -83,6 +84,7 @@ Value Worker::enter_node(Node& n) {
     if (stopped()) return VALUE_ZERO;
     if (is_draw(pos, n.ply)) return draw_value();
     if (n.ply >= MAX_PLY - 1) return n.in_check ? VALUE_ZERO : evaluate(n.ply);
+    if (claim_upcoming_draw(pos, n.ply, n.alpha, n.beta)) return n.alpha;
 
     // Un mate mas corto ya encontrado hace inutil seguir por esta rama.
     n.alpha = std::max(mated_in(n.ply), n.alpha);
@@ -133,7 +135,8 @@ void Worker::compute_static_eval(Node& n) {
   } else {
     const bool stored = n.tt_hit && n.tt.eval != VALUE_NONE;
     n.raw_eval = stored ? n.tt.eval : evaluate(n.ply);
-    ss->static_eval = n.eval = corrected_eval(n.pos, n.raw_eval);
+    ss->static_eval = n.eval = corrected_eval(ss, n.raw_eval);
+    n.complexity = std::abs(ss->static_eval - n.raw_eval);
     if (!n.tt_hit) {
       shared_.tt.store(n.key, VALUE_NONE, n.raw_eval, -1, Bound::None, Move::none(), ss->tt_pv);
     }
@@ -154,6 +157,24 @@ void Worker::compute_static_eval(Node& n) {
   }
 }
 
+// Corrige a posteriori la profundidad que el padre dio a este nodo al reducirlo. Si su jugada
+// no empeoro la evaluacion de quien la hizo, la reduccion fue excesiva y se busca una mas; si
+// la empeoro con claridad, se busca una menos. Idea comun en los motores abiertos: Berserk,
+// Stormphrax, Viridithas y Reckless, entre otros.
+void Worker::adjust_depth_in_hindsight(Node& n) const {
+  const StackEntry* ss = n.ss;
+  if (n.pv_node || n.in_check || n.excluded != Move::none()) return;
+  const int reduction = ss[-1].reduction;
+  if (reduction <= 0 || ss[-1].static_eval == VALUE_NONE) return;
+  const int sum = ss->static_eval + ss[-1].static_eval;
+  if (reduction >= params::kHindsightExtendReduction && sum <= 0) {
+    n.depth = std::min(n.depth + 1, MAX_PLY - 1);
+  } else if (reduction >= params::kHindsightReduceReduction && n.depth >= 2 &&
+             sum > params::kHindsightMargin) {
+    n.depth -= 1;
+  }
+}
+
 // Si la evaluacion salto tras una jugada tranquila, esa jugada era mejor o peor
 // de lo que indicaba el historial: se ajusta sin esperar a un corte.
 void Worker::learn_from_eval_swing(const Node& n) {
@@ -162,8 +183,9 @@ void Worker::learn_from_eval_swing(const Node& n) {
   if (!prior.is_ok() || ss[-1].in_check || n.pos.captured_piece() != NO_PIECE) return;
   if (ss[-1].static_eval == VALUE_NONE) return;
   const int swing = -8 * (ss[-1].static_eval + ss->static_eval);
-  update_history<kMainHistoryLimit>(histories_->main[~n.pos.side_to_move()][prior.from_to()],
-                                    std::clamp(swing, -1000, 1000));
+  update_history<kMainHistoryLimit>(
+      main_entry(histories_->main, ~n.pos.side_to_move(), ss[-1].threats, prior),
+      std::clamp(swing, -1000, 1000));
 }
 
 Value Worker::null_move_search(Node& n) {
@@ -200,8 +222,10 @@ Value Worker::forward_prune(Node& n) {
   }
 
   // Poda de futilidad inversa: tan por encima de beta que se da por bueno.
-  const int rfp_margin =
-      params::kRfpMargin * n.depth - params::kRfpImprovingBonus * int(n.improving);
+  // Si la correccion movio mucho la evaluacion, se fia menos de ella (Obsidian, Stormphrax,
+  // Viridithas y PlentyChess usan esa diferencia en las podas y en las reducciones).
+  const int rfp_margin = params::kRfpMargin * n.depth -
+                         params::kRfpImprovingBonus * int(n.improving) + n.complexity / 2;
   if (n.depth <= params::kRfpMaxDepth && n.eval - rfp_margin >= n.beta &&
       !is_mate_score(n.eval) && !is_mate_score(n.beta)) {
     return (n.eval + n.beta) / 2;
@@ -287,7 +311,7 @@ bool Worker::prune_move(Node& n, Candidate& c, bool& skip_quiets) {
     return true;
   }
 
-  history += 2 * histories_->main[pos.side_to_move()][c.move.from_to()];
+  history += 2 * main_entry(histories_->main, pos.side_to_move(), ss->threats, c.move);
   lmr_depth += history / params::kHistoryToLmrDepth;
 
   if (!n.in_check && lmr_depth < params::kFutilityMaxDepth) {
@@ -354,7 +378,7 @@ int Worker::adjusted_reduction(const Node& n, const Candidate& c) {
   const ContinuationRefs refs = continuation_refs(ss);
   const int stat_score =
       c.capture ? 2 * histories_->capture[c.piece][c.to][n.pos.captured_type(c.move)]
-                : 2 * histories_->main[n.pos.side_to_move()][c.move.from_to()] +
+                : 2 * main_entry(histories_->main, n.pos.side_to_move(), ss->threats, c.move) +
                       (*refs[0])[c.piece][c.to] + (*refs[1])[c.piece][c.to] +
                       (*refs[2])[c.piece][c.to];
 
@@ -366,6 +390,7 @@ int Worker::adjusted_reduction(const Node& n, const Candidate& c) {
   if (ss[1].cutoff_count > 3) r += kLmrUnit;
   if (c.move == n.tt_move) r -= kLmrUnit;
   if (c.gives_check) r -= kLmrUnit / 2;
+  r -= n.complexity * kLmrUnit / params::kComplexityLmrDivisor;  // evaluacion poco fiable
   return r - stat_score * kLmrUnit / params::kLmrStatScoreDivisor;
 }
 
@@ -375,7 +400,9 @@ Value Worker::reduced_search(Node& n, const Candidate& c, int& new_depth) {
   const int ply = n.ply + 1;
   const int r = adjusted_reduction(n, c);
   const int reduced = std::clamp(new_depth - r / kLmrUnit, 1, std::max(1, new_depth + 1));
+  n.ss->reduction = new_depth - reduced;
   Value value = -search<NodeType::NonPv>(ply, -(alpha + 1), -alpha, reduced, true);
+  n.ss->reduction = 0;
 
   if (value > alpha && reduced < new_depth) {
     const bool deeper = value > n.best_value + params::kLmrDeeperMargin + 2 * new_depth;
@@ -472,7 +499,8 @@ Value Worker::move_loop(Node& n) {
   const Move counter = prior.is_ok()
                            ? histories_->counter_moves[pos.piece_on(prior.to())][prior.to()]
                            : Move::none();
-  MovePicker picker(pos, n.tt_move, *histories_, refs, {ss->killers[0], ss->killers[1], counter});
+  MovePicker picker(pos, n.tt_move, *histories_, refs, {ss->killers[0], ss->killers[1], counter},
+                    ss->threats);
 
   bool skip_quiets = false;
   Move m = Move::none();
@@ -522,6 +550,14 @@ Value Worker::finish_node(Node& n) {
 
   if (n.excluded != Move::none()) return n.best_value;
 
+  // Fuera de la variante principal, el exceso sobre beta de un corte suele ser ruido: se
+  // acerca a beta tanto mas cuanto menos profunda es la busqueda (Stormphrax, Viridithas,
+  // Caissa, PlentyChess y Halogen lo hacen).
+  if (!n.pv_node && n.best_value >= n.beta && !is_mate_score(n.best_value) &&
+      !is_mate_score(n.beta)) {
+    n.best_value = (n.best_value * n.depth + n.beta) / (n.depth + 1);
+  }
+
   // En MultiPV las lineas secundarias no son el valor real de la raiz.
   if (!(n.root_node && pv_index_ > 0)) {
     Bound bound = Bound::Upper;
@@ -537,7 +573,7 @@ Value Worker::finish_node(Node& n) {
     const bool bound_disagrees = (bound == Bound::Lower && n.best_value <= ss->static_eval) ||
                                  (bound == Bound::Upper && n.best_value >= ss->static_eval);
     if (!n.in_check && !tactical_best && !bound_disagrees && !is_mate_score(n.best_value)) {
-      update_correction(pos, n.depth, n.best_value - ss->static_eval);
+      update_correction(ss, n.depth, n.best_value - ss->static_eval);
     }
   }
   return n.best_value;
@@ -560,15 +596,20 @@ Value Worker::search(int ply, Value alpha, Value beta, int depth, bool cut_node)
   if (can_cut_with_tt(n)) {
     if (n.tt_value >= n.beta && n.tt_move != Move::none() && !n.tt_capture &&
         n.pos.is_pseudo_legal(n.tt_move)) {
+      ss->threats = history_threats(n.pos);
       update_quiet_history(n.pos, ss, n.tt_move, history_bonus(n.depth));
     }
     return n.tt_value;
   }
 
   compute_static_eval(n);
+  adjust_depth_in_hindsight(n);
 
   const Value pruned = forward_prune(n);
   if (pruned != VALUE_NONE) return pruned;
+
+  // Las amenazas solo hacen falta si el nodo prueba jugadas: se calculan tras las podas.
+  ss->threats = history_threats(n.pos);
 
   // Sin jugada de la tabla hash el orden sera malo: se busca menos profundo y la
   // proxima visita ya tendra una jugada con la que empezar.

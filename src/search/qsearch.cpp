@@ -43,6 +43,7 @@ Value Worker::qsearch_enter(QNode& q) {
   if (stopped()) return VALUE_ZERO;
   if (is_draw(q.pos, q.ply)) return draw_value();
   if (q.ply >= MAX_PLY - 1) return q.in_check ? VALUE_ZERO : evaluate(q.ply);
+  if (claim_upcoming_draw(q.pos, q.ply, q.alpha, q.beta)) return q.alpha;
   return VALUE_NONE;
 }
 
@@ -62,7 +63,7 @@ Value Worker::qsearch_stand_pat(QNode& q) {
   }
 
   q.raw_eval = q.tt_hit && q.tt.eval != VALUE_NONE ? q.tt.eval : evaluate(q.ply);
-  ss->static_eval = q.best_value = corrected_eval(q.pos, q.raw_eval);
+  ss->static_eval = q.best_value = corrected_eval(ss, q.raw_eval);
   if (q.tt_hit && q.tt_value != VALUE_NONE &&
       has_bound(q.tt.bound, q.tt_value > q.best_value ? Bound::Lower : Bound::Upper)) {
     q.best_value = q.tt_value;
@@ -82,7 +83,12 @@ Value Worker::qsearch_stand_pat(QNode& q) {
 }
 
 bool Worker::qsearch_prune(QNode& q, Move m) {
-  if (q.best_value <= VALUE_MATED_IN_MAX_PLY || q.in_check) return false;
+  // En jaque las capturas van primero: si ya hay una evasion que no pierde por mate, las
+  // tranquilas que quedan rara vez cambian el resultado (Obsidian, PlentyChess y Alexandria).
+  if (q.in_check) {
+    return q.best_value > VALUE_MATED_IN_MAX_PLY && !q.pos.is_tactical(m);
+  }
+  if (q.best_value <= VALUE_MATED_IN_MAX_PLY) return false;
 
   // Una promocion vale mucho mas de lo que mide `futility`: nunca se poda aqui.
   if (!q.pos.gives_check(m) && m.kind() != MoveKind::Promotion &&
@@ -118,8 +124,11 @@ Value Worker::qsearch(int ply, Value alpha, Value beta) {
   early = qsearch_stand_pat(q);
   if (early != VALUE_NONE) return early;
 
+  // Solo las evasiones usan el historial principal. No se guarda en la pila: este nodo puede
+  // compartir nivel con uno de la busqueda principal que ya lo calculo (razoring).
   const ContinuationRefs refs = continuation_refs(ss);
-  MovePicker picker(q.pos, q.tt_move, *histories_, refs);
+  const Bitboard threats = q.in_check ? history_threats(q.pos) : 0;
+  MovePicker picker(q.pos, q.tt_move, *histories_, refs, threats);
   Move m = Move::none();
 
   while ((m = picker.next()) != Move::none()) {
@@ -147,6 +156,10 @@ Value Worker::qsearch(int ply, Value alpha, Value beta) {
   const Bound bound = q.best_value >= q.beta ? Bound::Lower : Bound::Upper;
   shared_.tt.store(q.pos.key(), value_to_tt(q.best_value, ply), q.raw_eval, 0, bound, q.best_move,
                    q.tt_pv);
+  // Un corte se devuelve a medio camino de beta, como en el cierre de los nodos normales.
+  if (q.best_value >= q.beta && !is_mate_score(q.best_value) && !is_mate_score(q.beta)) {
+    return (q.best_value + q.beta) / 2;
+  }
   return q.best_value;
 }
 

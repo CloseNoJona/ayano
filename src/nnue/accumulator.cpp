@@ -1,9 +1,17 @@
 #include "nnue/accumulator.h"
 
 #include <algorithm>
+#include <bit>
+#include <cstring>
 
 #if defined(__AVX2__)
 #include <immintrin.h>
+#endif
+
+// La cabeza profunda debe dar el mismo numero con y sin AVX2: nada de fundir multiplicacion y
+// suma en FMA. GCC y Clang lo evitan con -ffp-contract=off (CMakeLists.txt y Makefile).
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma fp_contract(off)
 #endif
 
 namespace ayano::nnue {
@@ -136,6 +144,118 @@ std::int64_t screlu_dot(const std::int16_t* values, const std::int16_t* weights)
   return _mm_cvtsi128_si64(_mm_add_epi64(half, _mm_unpackhi_epi64(half, half)));
 }
 
+// Parejas de una perspectiva en [0, kPairMax]. (a * b) >> 9 es mulhi(a << 7, b) sin perder
+// nada, porque a << 7 <= 32640 cabe en 16 bits sin signo.
+void pairwise(const std::int16_t* values, std::uint8_t* out) {
+  const __m256i zero = _mm256_setzero_si256();
+  const __m256i limit = _mm256_set1_epi16(kQuantActivation);
+  const auto clipped = [&](const std::int16_t* p) {
+    return _mm256_min_epi16(_mm256_max_epi16(load_lanes(p), zero), limit);
+  };
+  for (int i = 0; i < kPairs; i += 2 * kLanes) {
+    const __m256i low = _mm256_mulhi_epu16(_mm256_slli_epi16(clipped(values + i), 16 - kPairShift),
+                                           clipped(values + kPairs + i));
+    const __m256i high =
+        _mm256_mulhi_epu16(_mm256_slli_epi16(clipped(values + i + kLanes), 16 - kPairShift),
+                           clipped(values + kPairs + i + kLanes));
+    // packus intercala las mitades de 128 bits; el permute las devuelve a su orden.
+    const __m256i packed = _mm256_permute4x64_epi64(_mm256_packus_epi16(low, high), 0b11011000);
+    _mm256_storeu_si256(reinterpret_cast<__m256i*>(out + i), packed);
+  }
+}
+
+// Primera capa de la cabeza. Tras el producto por parejas muchas entradas valen cero, asi que
+// solo se recorren los grupos de 4 entradas con alguna distinta de cero. Cada grupo se repite
+// en todo el registro y maddubs lo multiplica por sus pesos de las 16 neuronas: dos productos
+// u8 x i8 en 16 bits, que no saturan porque las entradas no pasan de 127, y madd los lleva a
+// 32 bits. Las sumas enteras no dependen del orden: el resultado es el de la version escalar.
+void deep_first_layer(const std::uint8_t* inputs, const std::int8_t* weights,
+                      std::array<std::int32_t, kDeepL1>& sums) {
+  static_assert(kDeepL1 == 16, "dos registros de 8 neuronas");
+  constexpr int kGroups = kDeepInputs / 4;
+  std::array<std::uint16_t, kGroups> active;
+  int count = 0;
+  const __m256i zero = _mm256_setzero_si256();
+  for (int i = 0; i < kDeepInputs; i += 32) {
+    // Con bytes de 0 a 127, un grupo de 4 leido como int32 es positivo si no es todo cero.
+    const __m256i x = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(inputs + i));
+    unsigned mask = unsigned(_mm256_movemask_ps(_mm256_castsi256_ps(_mm256_cmpgt_epi32(x, zero))));
+    while (mask) {
+      active[std::size_t(count++)] = std::uint16_t(i / 4 + std::countr_zero(mask));
+      mask &= mask - 1;
+    }
+  }
+
+  const __m256i ones = _mm256_set1_epi16(1);
+  __m256i low = _mm256_setzero_si256();
+  __m256i high = _mm256_setzero_si256();
+  for (int k = 0; k < count; ++k) {
+    const int group = active[std::size_t(k)];
+    std::int32_t packed;
+    std::memcpy(&packed, inputs + 4 * group, sizeof(packed));
+    const __m256i x = _mm256_set1_epi32(packed);
+    const std::int8_t* w = weights + std::size_t(group) * kDeepL1 * 4;
+    const __m256i w_low = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(w));
+    const __m256i w_high = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(w + 32));
+    low = _mm256_add_epi32(low, _mm256_madd_epi16(_mm256_maddubs_epi16(x, w_low), ones));
+    high = _mm256_add_epi32(high, _mm256_madd_epi16(_mm256_maddubs_epi16(x, w_high), ones));
+  }
+  _mm256_storeu_si256(reinterpret_cast<__m256i*>(sums.data()), low);
+  _mm256_storeu_si256(reinterpret_cast<__m256i*>(sums.data() + 8), high);
+}
+
+// SCReLU en coma flotante, como en el entrenador: recorta a [0, 1] y eleva al cuadrado.
+inline __m256 screlu_ps(__m256 x) {
+  const __m256 clipped = _mm256_min_ps(_mm256_max_ps(x, _mm256_setzero_ps()), _mm256_set1_ps(1.0f));
+  return _mm256_mul_ps(clipped, clipped);
+}
+
+// Capas en coma flotante de la cabeza, con el orden de sumas descrito en la version escalar.
+// Multiplicar y sumar van por separado, como alli: sin FMA el resultado es identico.
+float deep_float_layers(const Network& network, std::size_t bucket,
+                        const std::array<std::int32_t, kDeepL1>& sums) {
+  const __m256 scale = _mm256_set1_ps(float(kPairMax * kDeepWeightScale));
+  const float* l1_bias = network.l1_bias.data() + bucket * kDeepL1;
+  alignas(32) std::array<float, kDeepL1> first;
+  for (std::size_t h = 0; h < kDeepL1; h += 8) {
+    const __m256 sum =
+        _mm256_cvtepi32_ps(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(sums.data() + h)));
+    const __m256 value = _mm256_add_ps(_mm256_div_ps(sum, scale), _mm256_loadu_ps(l1_bias + h));
+    _mm256_store_ps(first.data() + h, screlu_ps(value));
+  }
+
+  const float* l2_bias = network.l2_bias.data() + bucket * kDeepL2;
+  const float* l2 = network.l2_weights.data() + bucket * kDeepL1 * kDeepL2;
+  // Como argumento de plantilla, GCC descarta los atributos de __m256 y avisa
+  // (-Wignored-attributes). Aqui no importa: el arreglo solo guarda registros y se usa como tal.
+  // Envolver __m256 en un struct evita el aviso, pero MSVC lo compila un 2 % mas lento.
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wignored-attributes"
+#endif
+  std::array<__m256, kDeepL2 / 8> second;
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+  for (std::size_t j = 0; j < second.size(); ++j) second[j] = _mm256_loadu_ps(l2_bias + 8 * j);
+  for (std::size_t o = 0; o < kDeepL1; ++o) {
+    const __m256 x = _mm256_set1_ps(first[o]);
+    for (std::size_t j = 0; j < second.size(); ++j) {
+      second[j] = _mm256_add_ps(second[j], _mm256_mul_ps(_mm256_loadu_ps(l2 + o * kDeepL2 + 8 * j), x));
+    }
+  }
+
+  const float* l3 = network.l3_weights.data() + bucket * kDeepL2;
+  __m256 lanes = _mm256_setzero_ps();
+  for (std::size_t j = 0; j < second.size(); ++j) {
+    lanes = _mm256_add_ps(lanes, _mm256_mul_ps(_mm256_loadu_ps(l3 + 8 * j), screlu_ps(second[j])));
+  }
+  const __m128 halves = _mm_add_ps(_mm256_castps256_ps128(lanes), _mm256_extractf128_ps(lanes, 1));
+  const __m128 pairs = _mm_add_ps(halves, _mm_movehl_ps(halves, halves));
+  const __m128 total = _mm_add_ss(pairs, _mm_shuffle_ps(pairs, pairs, 0x55));
+  return network.l3_bias[bucket] + _mm_cvtss_f32(total);
+}
+
 #else
 
 void apply_rows(const std::int16_t* from, std::int16_t* to,
@@ -158,7 +278,77 @@ std::int64_t screlu_dot(const std::int16_t* values, const std::int16_t* weights)
   return sum;
 }
 
+void pairwise(const std::int16_t* values, std::uint8_t* out) {
+  for (int i = 0; i < kPairs; ++i) {
+    const int a = std::clamp(int(values[i]), 0, kQuantActivation);
+    const int b = std::clamp(int(values[i + kPairs]), 0, kQuantActivation);
+    out[i] = std::uint8_t((a * b) >> kPairShift);
+  }
+}
+
+void deep_first_layer(const std::uint8_t* inputs, const std::int8_t* weights,
+                      std::array<std::int32_t, kDeepL1>& sums) {
+  sums.fill(0);
+  for (int group = 0; group < kDeepInputs / 4; ++group) {
+    const std::int8_t* w = weights + std::size_t(group) * kDeepL1 * 4;
+    for (int o = 0; o < kDeepL1; ++o) {
+      for (int j = 0; j < 4; ++j) sums[std::size_t(o)] += int(inputs[4 * group + j]) * int(w[4 * o + j]);
+    }
+  }
+}
+
+// Capas en coma flotante de la cabeza, en un orden de sumas fijo que la version AVX2 repite:
+// asi todas las compilaciones dan el mismo numero y la firma de bench no depende de la CPU.
+// - Primera: suma entera a coma flotante, sesgo y SCReLU (recorte a [0, 1] y cuadrado).
+// - Segunda: cada neurona parte de su sesgo y suma sus 16 entradas en orden.
+// - Tercera: ocho sumas parciales, la j con las entradas j, j + 8, j + 16 y j + 24 en ese orden;
+//   luego la j con la j + 4, esas cuatro de dos en dos, y al final el sesgo.
+float deep_float_layers(const Network& network, std::size_t bucket,
+                        const std::array<std::int32_t, kDeepL1>& sums) {
+  const auto screlu = [](float x) {
+    const float clipped = std::min(std::max(x, 0.0f), 1.0f);
+    return clipped * clipped;
+  };
+  const float scale = float(kPairMax * kDeepWeightScale);
+  std::array<float, kDeepL1> first;
+  for (std::size_t o = 0; o < first.size(); ++o) {
+    first[o] = screlu(float(sums[o]) / scale + network.l1_bias[bucket * kDeepL1 + o]);
+  }
+
+  std::array<float, kDeepL2> second;
+  std::copy_n(network.l2_bias.data() + bucket * kDeepL2, kDeepL2, second.begin());
+  const float* l2 = network.l2_weights.data() + bucket * kDeepL1 * kDeepL2;
+  for (std::size_t o = 0; o < first.size(); ++o) {
+    for (std::size_t k = 0; k < second.size(); ++k) second[k] = second[k] + l2[o * kDeepL2 + k] * first[o];
+  }
+
+  const float* l3 = network.l3_weights.data() + bucket * kDeepL2;
+  std::array<float, 8> lanes{};
+  for (std::size_t k = 0; k < second.size(); ++k) lanes[k % 8] = lanes[k % 8] + l3[k] * screlu(second[k]);
+  const float t0 = lanes[0] + lanes[4];
+  const float t1 = lanes[1] + lanes[5];
+  const float t2 = lanes[2] + lanes[6];
+  const float t3 = lanes[3] + lanes[7];
+  return network.l3_bias[bucket] + ((t0 + t2) + (t1 + t3));
+}
+
 #endif
+
+Value deep_output(const Network& network, const Accumulator& accumulator, const Position& pos) {
+  const Color us = pos.side_to_move();
+  const std::size_t bucket = std::size_t(output_bucket(popcount(pos.pieces())));
+  alignas(64) std::array<std::uint8_t, kDeepInputs> inputs;
+  pairwise(accumulator.values[us].data(), inputs.data());
+  pairwise(accumulator.values[~us].data(), inputs.data() + kPairs);
+
+  std::array<std::int32_t, kDeepL1> sums;
+  deep_first_layer(inputs.data(), network.l1_weights.data() + bucket * kDeepL1 * kDeepInputs, sums);
+  const float output = deep_float_layers(network, bucket, sums);
+  // Una red valida no se acerca a este limite; uno manipulado desbordaria despues el entero
+  // de la evaluacion al aplicar la regla de las 50 jugadas.
+  constexpr float kLimit = 30000.0f;
+  return Value(static_cast<int>(std::clamp(output * float(network.eval_scale), -kLimit, kLimit)));
+}
 
 // Lleva un acumulador de un conjunto de piezas a otro, de cuatro filas en cuatro.
 class RowBatch {
@@ -192,6 +382,7 @@ class RowBatch {
 };
 
 Value network_output(const Network& network, const Accumulator& accumulator, const Position& pos) {
+  if (network.head == Head::Deep) return deep_output(network, accumulator, pos);
   const Color us = pos.side_to_move();
   const int bucket = output_bucket(popcount(pos.pieces()));
   const std::int16_t* weights = network.output_weights.data() + std::size_t(bucket) * 2 * kHidden;

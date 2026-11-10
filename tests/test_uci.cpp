@@ -320,12 +320,13 @@ TEST(uci_con_poco_tiempo_solo_informa_al_final) {
   CHECK_EQ(count_lines(reply, "bestmove"), 1);
 }
 
-// Mientras medita el reloj del motor no corre: la interfaz puede leer sin prisa.
+// Mientras medita el reloj del motor no corre: la interfaz puede leer sin prisa. La espera es
+// holgada porque con el equipo cargado 30 ms no siempre bastaban para dos iteraciones.
 TEST(uci_mientras_medita_informa_aunque_quede_poco_reloj) {
   UciSession session;
   session.run("position startpos");
   session.start("go ponder wtime 50 btime 50");
-  std::this_thread::sleep_for(std::chrono::milliseconds(30));
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
   CHECK(count_lines(session.finish("stop"), "info depth") > 1);
 }
 

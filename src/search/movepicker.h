@@ -21,11 +21,13 @@ struct Refutations {
 class MovePicker {
  public:
   // Busqueda principal.
+  // `threats` son las casillas que ataca el rival (ver main_entry).
   MovePicker(const Position& pos, Move tt_move, const Histories& histories,
-             const ContinuationRefs& continuation, const Refutations& refutations);
+             const ContinuationRefs& continuation, const Refutations& refutations,
+             Bitboard threats = 0);
   // Busqueda de quietud: solo capturas (o evasiones si hay jaque).
   MovePicker(const Position& pos, Move tt_move, const Histories& histories,
-             const ContinuationRefs& continuation);
+             const ContinuationRefs& continuation, Bitboard threats = 0);
   // ProbCut: capturas que superen `threshold` segun SEE.
   MovePicker(const Position& pos, Move tt_move, Value threshold, const Histories& histories);
 
@@ -59,6 +61,7 @@ class MovePicker {
   Refutations refutations_;
   Move tt_move_;
   Value threshold_;
+  Bitboard threats_;
   Stage stage_;
 
   ExtMove* cur_;

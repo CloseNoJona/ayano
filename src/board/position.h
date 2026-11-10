@@ -84,6 +84,8 @@ class Position {
 
   Bitboard attackers_to(Square s, Bitboard occupied) const;
   Bitboard attackers_to(Square s) const { return attackers_to(s, pieces()); }
+  // Todas las casillas que ataca el color indicado.
+  Bitboard attacks_by(Color c) const;
   bool has_non_pawn_material(Color c) const {
     return (pieces(c) ^ pieces(c, PAWN, KING)) != 0;
   }

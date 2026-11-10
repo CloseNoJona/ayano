@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 
+#include "board/cuckoo.h"
 #include "core/attacks.h"
 #include "core/cpu.h"
 #include "core/zobrist.h"
@@ -16,6 +17,7 @@ int main(int argc, char** argv) {
 
   ayano::attacks::init();
   ayano::zobrist::init();
+  ayano::cuckoo::init();
   // Sin este aviso el motor pasaria a la evaluacion clasica en silencio.
   std::string error;
   if (!ayano::nnue::init(&error)) {

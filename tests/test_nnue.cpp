@@ -1,3 +1,7 @@
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iterator>
 #include <memory>
@@ -30,12 +34,176 @@ std::unique_ptr<Network> random_network(std::uint64_t seed) {
   return network;
 }
 
+std::unique_ptr<Network> random_deep_network(std::uint64_t seed) {
+  auto network = random_network(seed);
+  network->head = Head::Deep;
+  Prng rng(seed * 7919 + 1);
+  const auto uniform = [&rng](float range) {
+    return (float(rng.below(20001)) / 10000.0f - 1.0f) * range;
+  };
+  // Pesos de la primera capa en todo el rango de int8, para cubrir los extremos de maddubs.
+  for (auto& w : network->l1_weights) w = std::int8_t(int(rng.below(256)) - 128);
+  for (auto& b : network->l1_bias) b = uniform(1.0f);
+  for (auto& w : network->l2_weights) w = uniform(1.5f);
+  for (auto& b : network->l2_bias) b = uniform(0.5f);
+  for (auto& w : network->l3_weights) w = uniform(1.5f);
+  for (auto& b : network->l3_bias) b = uniform(0.5f);
+  return network;
+}
+
+// La cabeza profunda calculada de la forma mas directa, sin acumuladores ni SIMD.
+Value reference_deep_eval(const Network& network, const Position& pos) {
+  std::array<std::array<std::int32_t, kHidden>, COLOR_NB> hidden{};
+  for (const Color perspective : {WHITE, BLACK}) {
+    auto& values = hidden[std::size_t(perspective)];
+    for (int i = 0; i < kHidden; ++i) values[std::size_t(i)] = network.feature_bias[std::size_t(i)];
+    Bitboard occupied = pos.pieces();
+    while (occupied) {
+      const Square s = pop_lsb(occupied);
+      const int feature = feature_index(perspective, pos.king_square(perspective), pos.piece_on(s), s);
+      for (int i = 0; i < kHidden; ++i) {
+        values[std::size_t(i)] += network.feature_weights[std::size_t(feature) * kHidden + std::size_t(i)];
+      }
+    }
+  }
+  std::array<int, kDeepInputs> inputs{};
+  const Color order[2] = {pos.side_to_move(), ~pos.side_to_move()};
+  for (int side = 0; side < 2; ++side) {
+    const auto& values = hidden[std::size_t(order[side])];
+    for (int i = 0; i < kPairs; ++i) {
+      const int a = std::clamp(values[std::size_t(i)], 0, kQuantActivation);
+      const int b = std::clamp(values[std::size_t(i + kPairs)], 0, kQuantActivation);
+      inputs[std::size_t(side * kPairs + i)] = (a * b) >> kPairShift;
+    }
+  }
+  const std::size_t bucket = std::size_t(output_bucket(popcount(pos.pieces())));
+  const auto screlu = [](float x) {
+    const float c = std::clamp(x, 0.0f, 1.0f);
+    return c * c;
+  };
+  std::array<float, kDeepL1> first{};
+  for (std::size_t o = 0; o < first.size(); ++o) {
+    std::int32_t sum = 0;
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+      // [cubeta][grupo de 4 entradas][neurona][entrada del grupo]
+      sum += inputs[i] * network.l1_weights[((bucket * kDeepInputs / 4 + i / 4) * kDeepL1 + o) * 4 + i % 4];
+    }
+    first[o] = screlu(float(sum) / float(kPairMax * kDeepWeightScale) + network.l1_bias[bucket * kDeepL1 + o]);
+  }
+  std::array<float, kDeepL2> second{};
+  for (std::size_t k = 0; k < second.size(); ++k) {
+    float sum = network.l2_bias[bucket * kDeepL2 + k];
+    for (std::size_t o = 0; o < first.size(); ++o) {
+      sum += network.l2_weights[(bucket * kDeepL1 + o) * kDeepL2 + k] * first[o];
+    }
+    second[k] = screlu(sum);
+  }
+  // Ocho sumas parciales por resto modulo 8, juntadas de dos en dos, y al final el sesgo.
+  std::array<float, 8> lanes{};
+  for (std::size_t k = 0; k < second.size(); ++k) {
+    lanes[k % 8] = lanes[k % 8] + network.l3_weights[bucket * kDeepL2 + k] * second[k];
+  }
+  const float sum = ((lanes[0] + lanes[4]) + (lanes[2] + lanes[6])) + ((lanes[1] + lanes[5]) + (lanes[3] + lanes[7]));
+  const float output = network.l3_bias[bucket] + sum;
+  return Value(static_cast<int>(output * float(network.eval_scale)));
+}
+
 struct Frame {
   Position pos;
   Move move;
 };
 
 }  // namespace
+
+// El camino SIMD de la cabeza profunda debe dar exactamente lo mismo que el calculo directo.
+TEST(cabeza_profunda_coincide_con_el_calculo_directo) {
+  const std::vector<std::string> fens = {
+      "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R b KQkq - 0 1",
+      "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+      "8/8/4k3/8/8/3K4/4P3/8 b - - 0 1",
+  };
+  for (const std::uint64_t seed : {3u, 4u, 5u}) {
+    const auto network = random_deep_network(seed);
+    for (const std::string& fen : fens) {
+      const auto pos = Position::from_fen(fen);
+      CHECK(pos.has_value());
+      if (!pos) continue;
+      CHECK_EQ(evaluate_from_scratch(*network, *pos), reference_deep_eval(*network, *pos));
+    }
+  }
+}
+
+TEST(cabeza_profunda_incremental_coincide_con_recalculo) {
+  const auto network = random_deep_network(17);
+  std::mt19937 rng(5);
+  auto stack = std::make_unique<AccumulatorStack>();
+  for (int game = 0; game < 12; ++game) {
+    std::vector<Frame> frames(1);
+    frames[0] = {Position::startpos(), Move::none()};
+    stack->reset();
+    const auto get_entry = [&frames](int ply) -> const Frame& { return frames[std::size_t(ply)]; };
+    for (int ply = 0; ply < 60; ++ply) {
+      if (rng() % 2 == 0) {
+        CHECK_EQ(stack->evaluate(*network, ply, get_entry),
+                 evaluate_from_scratch(*network, frames[std::size_t(ply)].pos));
+      }
+      const MoveList moves = legal_moves(frames[std::size_t(ply)].pos);
+      if (moves.empty()) break;
+      const Move m = moves[rng() % moves.size()].move;
+      frames[std::size_t(ply)].move = m;
+      frames.push_back({frames[std::size_t(ply)].pos.after(m), Move::none()});
+      stack->on_move(ply + 1);
+    }
+  }
+}
+
+TEST(cabeza_profunda_es_simetrica_al_invertir_colores) {
+  const auto network = random_deep_network(23);
+  const auto white = Position::from_fen("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3");
+  const auto black = Position::from_fen("rnbqkb1r/pppp1ppp/5n2/4p3/4P3/2N5/PPPP1PPP/R1BQKBNR b KQkq - 2 3");
+  CHECK(white && black);
+  if (!white || !black) return;
+  CHECK_EQ(evaluate_from_scratch(*network, *white), evaluate_from_scratch(*network, *black));
+}
+
+TEST(cabeza_profunda_se_guarda_y_se_carga_igual) {
+  const auto original = random_deep_network(8);
+  original->eval_scale = 155;
+  const std::string path = "test_red_profunda.nnue";
+  std::string error;
+  CHECK(save_network_file(*original, path, &error));
+  CHECK(load_network_file(path, &error));
+  const Network* loaded = active_network();
+  CHECK(loaded != nullptr);
+  if (loaded) {
+    CHECK(loaded->head == Head::Deep);
+    CHECK(loaded->feature_weights == original->feature_weights);
+    CHECK(loaded->l1_weights == original->l1_weights);
+    CHECK(loaded->l1_bias == original->l1_bias);
+    CHECK(loaded->l2_weights == original->l2_weights);
+    CHECK(loaded->l3_bias == original->l3_bias);
+    CHECK_EQ(loaded->eval_scale, 155);
+    CHECK_EQ(evaluate_from_scratch(*loaded, Position::startpos()),
+             evaluate_from_scratch(*original, Position::startpos()));
+  }
+  std::remove(path.c_str());
+  CHECK(init(&error));  // deja la red integrada para el resto de los tests
+}
+
+// Un NaN o un peso desmesurado darian evaluaciones sin sentido o un entero desbordado.
+TEST(cabeza_profunda_con_valores_invalidos_se_rechaza) {
+  const std::string path = "test_red_profunda_invalida.nnue";
+  for (const float bad : {std::nanf(""), 1e30f, -20000.0f}) {
+    auto network = random_deep_network(9);
+    network->l2_weights[40] = bad;
+    std::string error;
+    CHECK(save_network_file(*network, path, &error));
+    CHECK(!load_network_file(path, &error));
+    CHECK(!error.empty());
+  }
+  std::remove(path.c_str());
+}
 
 // Si el camino incremental y el recalculo difieren en un solo bit, la red evaluaria
 // distinto segun como se llego a la posicion.

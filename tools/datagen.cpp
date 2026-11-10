@@ -14,6 +14,7 @@
 #include <thread>
 #include <vector>
 
+#include "board/cuckoo.h"
 #include "board/movegen.h"
 #include "core/attacks.h"
 #include "core/prng.h"
@@ -253,6 +254,7 @@ int main(int argc, char** argv) {
 
   attacks::init();
   zobrist::init();
+  cuckoo::init();
   if (!config.net_path.empty()) {
     std::string error;
     if (!nnue::load_network_file(config.net_path, &error)) {

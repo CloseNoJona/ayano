@@ -25,7 +25,7 @@ else
   $(error ARCH debe ser native, avx2 o portable)
 endif
 
-ALL_FLAGS := -std=c++20 -O3 -DNDEBUG -Wall -Wextra -Isrc -Itests -pthread $(ARCH_FLAGS) \
+ALL_FLAGS := -std=c++20 -O3 -DNDEBUG -Wall -Wextra -ffp-contract=off -Isrc -Itests -pthread $(ARCH_FLAGS) \
              -DAYANO_HIDDEN=1024 -DAYANO_HAS_EMBEDDED_NET $(CXXFLAGS)
 LINK_FLAGS := -pthread $(if $(STATIC),-static) $(LDFLAGS)
 
