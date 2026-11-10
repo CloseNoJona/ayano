@@ -24,16 +24,21 @@ error del 95 %.
 ### Fuerza absoluta
 
 La regla es la lista [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) del 31 de octubre de 2026.
-Ayano 0.10.0 ronda los **3659, entre 3627 y 3689**, y la 0.9.1, los **3502, entre 3473 y 3535**: la
-mejora es de unos **+157 Elo**.
+Ayano 0.11.0 ronda los **3666, entre 3636 y 3694**; la 0.10.0, los **3659, entre 3627 y 3689**, y la
+0.9.1, los **3502, entre 3473 y 3535**.
 
-La 0.11.0 todavía no ha jugado contra estos rivales. Contra la 0.10.0 gana por **+44 ± 15 Elo** a
-5 s + 0,05, pero una diferencia entre versiones del mismo motor no se traslada tal cual a esta escala.
+De la 0.9.1 a la 0.10.0 la mejora es de unos **+157 Elo**. De la 0.10.0 a la 0.11.0, en cambio, esta
+escala no distingue las dos versiones: +7, entre −35 y +50, porque con 200 partidas por versión el
+margen de la diferencia ronda los ±43 puntos. En el duelo directo, a 5 s + 0,05, la 0.11.0 gana por
+**+44 ± 15 Elo**, pero una diferencia entre versiones del mismo motor no se traslada tal cual a esta
+escala.
 
 Se jugaron 100 partidas contra cada rival a 120 s + 1 s, con un hilo y 64 MB de hash por motor:
 
 | Versión | Rival y su rating | Resultado | Diferencia | Rating que implica |
 |---|---|---|---|---|
+| 0.11.0 | Clover 9.1, 3726 | +9 =60 −31 | −78 ± 43 | 3648 |
+| 0.11.0 | Motor 0.9.0, 3694 | +15 =67 −18 | −10 ± 39 | 3684 |
 | 0.10.0 | Clover 9.1, 3726 | +13 =56 −31 | −63 ± 45 | 3663 |
 | 0.10.0 | Motor 0.9.0, 3694 | +14 =61 −25 | −38 ± 43 | 3656 |
 | 0.9.1 | Carp 3.0.1, 3525 | +22 =45 −33 | −38 ± 51 | 3487 |
@@ -41,8 +46,9 @@ Se jugaron 100 partidas contra cada rival a 120 s + 1 s, con un hilo y 64 MB de 
 | 0.9.1 | Mantissa 3.7.2, 3311 | +57 =33 −10 | +177 ± 60 | 3488 |
 
 Son medidas propias, no un rating de CCRL: esa lista usa otras máquinas y otro grupo de rivales. La
-0.10.0 solo jugó contra dos, ambos más fuertes que ella, y casi todas las partidas de la 0.9.1 se
-jugaron con el equipo ocupado en entrenar. Stockfish 19 con 8 hilos está en 3803 en esa lista.
+0.11.0 y la 0.10.0 solo jugaron contra dos, ambos más fuertes que ellas, con las mismas aperturas, y
+casi todas las partidas de la 0.9.1 se jugaron con el equipo ocupado en entrenar. Stockfish 19 con
+8 hilos está en 3803 en esa lista.
 
 Las cifras que se publicaron antes, como los 3275 de la 0.9.0, usan la escala `UCI_Elo` de Stockfish
 limitado y no se pueden comparar con estas: la misma red y la misma búsqueda dan 3502 aquí. El
@@ -380,13 +386,15 @@ their own games. During development the engine was called Enroque.
 
 Strength was measured on an AMD Ryzen 5 5600 against engines on the
 [CCRL Blitz](https://computerchess.org.uk/ccrl/404/) list of 31 October 2026, 100 games per opponent
-at 120 s + 1 s, with one thread and 64 MB of hash per engine. Version 0.10.0 scored about 3659,
-between 3627 and 3689, against Motor 0.9.0 and Clover 9.1. Version 0.9.1 scored about 3502, between
-3473 and 3535, against Mantissa 3.7.2, Frozenight 6.0.0 and Carp 3.0.1. In a direct match at 5 s +
-0.05, 0.10.0 beat 0.9.1 by +189 ± 42 Elo over 200 games, and 0.11.0 beat 0.10.0 by +44 ± 15 Elo
-over 1000 games; 0.11.0 has not yet played the CCRL engines. These are the project's own
-measurements, not CCRL ratings. Earlier figures such as 3275 for 0.9.0 are on the `UCI_Elo` scale
-of limited Stockfish and cannot be compared with these.
+at 120 s + 1 s, with one thread and 64 MB of hash per engine. Version 0.11.0 scored about 3666,
+between 3636 and 3694, and version 0.10.0 about 3659, between 3627 and 3689, both against Motor
+0.9.0 and Clover 9.1 with the same openings. Version 0.9.1 scored about 3502, between 3473 and 3535,
+against Mantissa 3.7.2, Frozenight 6.0.0 and Carp 3.0.1. In a direct match at 5 s + 0.05, 0.10.0
+beat 0.9.1 by +189 ± 42 Elo over 200 games, and 0.11.0 beat 0.10.0 by +44 ± 15 Elo over 1000
+games; against the CCRL engines the difference between 0.11.0 and 0.10.0, +7 (−35 to +50), is
+within the margin of error. These are the project's own measurements, not CCRL ratings. Earlier
+figures such as 3275 for 0.9.0 are on the `UCI_Elo` scale of limited Stockfish and cannot be
+compared with these.
 
 Version 0.9.1 fixed the problems found in Cute Chess 1.5.1: 0.9.0 ran out of time in 10 of 48 games
 at 5 s per side without increment, and sent illegal moves in some analysis lines. It has been tested

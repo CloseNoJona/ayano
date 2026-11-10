@@ -467,10 +467,12 @@ reloj y 30 de incremento, la 0.11.0 y la 0.10.0 responden en 33 ms como mucho y 
 
 ### Fuerza de la 0.11
 
-La 0.11.0 no se ha medido aún contra los rivales de la lista CCRL. Contra el ejecutable publicado de
-la 0.10.0, los dos compilados con PGO, a 5 s + 0,05, con 64 MB de hash y cinco partidas a la vez sin
-nada más en el equipo, gana por +294 =539 −167, **+44,4 ± 14,6 Elo** en 1000 partidas. Ninguna se
-perdió por tiempo; el margen mínimo de reloj fue de 46 ms.
+Contra el ejecutable publicado de la 0.10.0, los dos compilados con PGO, a 5 s + 0,05, con 64 MB de
+hash y cinco partidas a la vez sin nada más en el equipo, la 0.11.0 gana por +294 =539 −167,
+**+44,4 ± 14,6 Elo** en 1000 partidas. Ninguna se perdió por tiempo; el margen mínimo de reloj fue
+de 46 ms. Contra los rivales de la lista CCRL, en cambio, no se distingue de la 0.10.0: 3666 frente
+a 3659, una diferencia de +7, entre −35 y +50. El detalle está en
+[Fuerza en la escala CCRL Blitz](#fuerza-en-la-escala-ccrl-blitz).
 
 | Cambio | Contra | Ritmo | Partidas | Elo |
 |---|---|---|---|---|
@@ -492,6 +494,8 @@ tablas con menos de 6 cp durante 12, desde la media jugada 80.
 
 | Versión | Rival | Rating del rival | Partidas | Resultado | Diferencia | Rating que implica |
 |---|---|---|---|---|---|---|
+| 0.11.0 | Clover 9.1 | 3726 | 100 | +9 =60 −31 | −78 ± 43 | 3648 |
+| 0.11.0 | Motor 0.9.0 | 3694 | 100 | +15 =67 −18 | −10 ± 39 | 3684 |
 | 0.10.0 | Clover 9.1 | 3726 | 100 | +13 =56 −31 | −63 ± 45 | 3663 |
 | 0.10.0 | Motor 0.9.0 | 3694 | 100 | +14 =61 −25 | −38 ± 43 | 3656 |
 | 0.9.1 | Carp 3.0.1 | 3525 | 100 | +22 =45 −33 | −38 ± 51 | 3487 |
@@ -503,11 +507,18 @@ explica los resultados de cada versión. El intervalo del 95 % sale de remuestre
 
 | Versión | Rating estimado | Intervalo del 95 % | Chi cuadrado |
 |---|---|---|---|
+| 0.11.0 | **3666** | De 3636 a 3694 | 1,45 con 1 grado de libertad |
 | 0.10.0 | **3659** | De 3627 a 3689 | 0,05 con 1 grado de libertad |
 | 0.9.1 | **3502** | De 3473 a 3535 | 2,09 con 2 grados de libertad |
 
-Un solo rating explica bien los rivales de cada versión. La diferencia, de unos +157, concuerda con
-el duelo directo a 5 s + 0,05: +116 =67 −17, +189 ± 42 Elo en 200 partidas.
+Un solo rating explica bien los rivales de cada versión. De la 0.9.1 a la 0.10.0, la diferencia, de
+unos +157, concuerda con el duelo directo a 5 s + 0,05: +116 =67 −17, +189 ± 42 Elo en 200 partidas.
+
+De la 0.10.0 a la 0.11.0 la diferencia es de +7, entre −35 y +50, remuestreando cada tanda por
+separado. Las dos versiones jugaron las mismas aperturas: la 0.11.0 sube contra Motor, del 44,5 % al
+48,5 %, y baja contra Clover, del 41,0 % al 39,0 %. Con 200 partidas por versión, el margen de la
+diferencia ronda los ±43 puntos, así que esta medida no confirma ni descarta una mejora como la del
+duelo directo, +44,4 ± 14,6. Para bajarlo a ±20 harían falta unas 800 partidas por versión.
 
 Las partidas no se jugaron todas en las mismas condiciones:
 
@@ -518,8 +529,10 @@ Las partidas no se jugaron todas en las mismas condiciones:
   interrumpió la primera. Se conservaron las 60 ya registradas.
 - **La 0.10.0** jugó a cinco partidas a la vez, sin nada más, en los seis núcleos. Lo hizo con una
   compilación anterior a tres correcciones que no alteran su juego: la huella `bench` es la misma.
+- **La 0.11.0** jugó igual, a cinco partidas a la vez y sin nada más, con el ejecutable `bmi2`
+  publicado y las mismas semillas de aperturas que la 0.10.0.
 
-Ninguna partida se perdió por tiempo. El margen mínimo de reloj fue de 453 ms en las 440 partidas que
+Ninguna partida se perdió por tiempo. El margen mínimo de reloj fue de 451 ms en las 640 partidas que
 lo registraron: las 60 interrumpidas por el corte no llegaron a guardarlo.
 
 La 0.9.0, con la misma red y la misma búsqueda que la 0.9.1, dio 3275 contra Stockfish limitado. Son
